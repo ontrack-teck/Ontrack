@@ -1427,7 +1427,7 @@ function renderUserList(){
     const bases=getBases();const b=bases.find(x=>x.id===currentBase);
     titleEl.textContent=(L.apSUL||'Utilisateurs')+' — '+(b?b.name:currentBase);
   }
-  const users=getUsers().filter(u=>u.role!=='admin');
+  const users=getUsers().filter(u=>u.email!==currentUser.email);
   const container=document.getElementById('uList');
   if(!users.length){container.innerHTML=`<div style="color:var(--muted);font-size:13px;padding:8px 0">${L.noUsers}</div>`;return;}
   container.innerHTML=users.map(u=>`
@@ -1435,16 +1435,33 @@ function renderUserList(){
       <div class="uitem-info">
         <div class="uitem-email" style="${u.status==='blocked'?'color:var(--muted);text-decoration:line-through':''}">${u.email}</div>
         <div class="uitem-meta">
+          <span class="${u.role==='admin'?'role-pill role-admin':'role-pill role-user'}">${u.role==='admin'?'Admin':'User'}</span>
           <span class="${u.status==='pending'?'pending-badge':u.status==='blocked'?'blocked-badge':'active-badge'}">${u.status==='pending'?L.statusPending:u.status==='blocked'?L.statusBlocked:L.statusActive}</span>
           ${u.status==='pending'?`<span style="font-size:11px;color:var(--muted)">${L.pendingHint}</span>`:''}
           ${u.status==='blocked'?`<span style="font-size:11px;color:var(--red)">${L.blockedHint}</span>`:''}
         </div>
       </div>
-      <div style="display:flex;gap:6px;">
+      <div style="display:flex;gap:6px;align-items:center;">
+        <button class="uitem-block" onclick="toggleAdmin('${u.email}')" title="${u.role==='admin'?'Rétrograder en utilisateur':'Promouvoir en administrateur'}" style="background:${u.role==='admin'?'rgba(240,165,0,.15)':'rgba(46,201,123,.1)'};color:${u.role==='admin'?'var(--accent)':'#2ec97b'};border:1px solid ${u.role==='admin'?'var(--accent)':'#2ec97b'};border-radius:6px;padding:4px 8px;font-size:11px;font-weight:700;cursor:pointer;">${u.role==='admin'?'👑 Admin':'⬆ Admin'}</button>
         ${u.status!=='pending'?`<button class="uitem-block" onclick="toggleBlock('${u.email}')" title="${u.status==='blocked'?L.unblockUser:L.blockUser}">${u.status==='blocked'?'🔓':'🔒'}</button>`:''}
         <button class="uitem-del" onclick="removeUser('${u.email}')" title="${L.delUser}">🗑</button>
       </div>
     </div>`).join('');
+}
+
+function toggleAdmin(email){
+  const users=getUsers();
+  const u=users.find(x=>x.email===email);
+  if(!u) return;
+  const newRole=u.role==='admin'?'user':'admin';
+  const action=newRole==='admin'?'promouvoir en Administrateur':'rétrograder en Utilisateur';
+  if(!confirm(`Voulez-vous ${action} :\n${email} ?`)) return;
+  u.role=newRole;
+  if(newRole==='admin' && u.status==='pending') u.status='active';
+  setUsers(users);
+  renderUserList();
+  const msg=document.getElementById('apMU');
+  if(msg){msg.textContent=`✓ ${email} est maintenant ${newRole==='admin'?'Administrateur':'Utilisateur'}`;msg.className='apmsg ok';setTimeout(()=>{msg.textContent='';msg.className='apmsg';},3000);}
 }
 
 function chgEmail(){
