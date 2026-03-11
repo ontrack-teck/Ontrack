@@ -387,6 +387,14 @@ tbody td{padding:11px 17px;font-size:12px;}
 #moReport .fg label{ font-size:12px; }
 ::-webkit-scrollbar{width:4px;}
 ::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px;}
+
+/* PAGINATION */
+.pagination{display:flex;align-items:center;justify-content:center;gap:6px;padding:14px 17px;border-top:1px solid var(--border);flex-wrap:wrap;}
+.pg-btn{background:transparent;border:1px solid var(--border);color:var(--muted);font-family:'DM Mono',monospace;font-size:12px;font-weight:700;padding:5px 11px;border-radius:6px;cursor:pointer;transition:all .15s;min-width:34px;}
+.pg-btn:hover{color:var(--text);border-color:var(--accent);}
+.pg-btn.active{background:var(--accent);color:#000;border-color:var(--accent);}
+.pg-btn:disabled{opacity:.35;cursor:not-allowed;}
+.pg-info{font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);padding:0 6px;}
 </style>
   <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
@@ -1505,6 +1513,9 @@ function chgPw(){
 // ═══════════════════ DATA ═══════════════════
 let data={vehicles:[],interventions:[]};
 let selVid=null,editVid=null,curYear=new Date().getFullYear(),curTab='flotte',charts={};
+// Pagination interventions
+const PAGE_SIZE=20;
+let curPage=1;
 let lang=localStorage.getItem('sgo_lang')||'fr';
 const DEFAULT_EUR=655.957;
 let _cfgCache = null;
@@ -2684,10 +2695,80 @@ function isUninstalled(vid){
 
 function selV(id){selVid=id;if(curTab!=='flotte')switchTab('flotte');else{renderSB();renderDet(id);}}
 
+
+// ══════════════════════════════════════════════
+// PAGINATION INTERVENTIONS
+// ══════════════════════════════════════════════
+function goPage(p){ curPage=p; renderDet(selVid); window.scrollTo({top:document.querySelector('.isec')?.offsetTop||0,behavior:'smooth'}); }
+
+function renderInterventionsPage(ii, isAdmin, L){
+  const totalPages = Math.ceil(ii.length / PAGE_SIZE);
+  const safePage = Math.min(Math.max(1, curPage), totalPages);
+  if(curPage !== safePage) curPage = safePage;
+  const pageItems = ii.slice((curPage-1)*PAGE_SIZE, curPage*PAGE_SIZE);
+
+  const rows = pageItems.map(i=>{
+    const hasA=i.attachments&&i.attachments.length>0;
+    const chips=hasA?i.attachments.map((a,ai)=>{
+      const isImg=a.type&&a.type.startsWith('image/');
+      const isXls2=a.name&&a.name.match(/\.xlsx?$|csv$/i);
+      const isPpt2=a.name&&a.name.match(/\.pptx?$/i);
+      const icon=isImg?'🖼':isXls2?'📊':isPpt2?'📑':'📄';
+      const cls=isImg?'attach-chip attach-chip-img':'attach-chip attach-chip-pdf';
+      return `<a class="${cls}" onclick="viewAttachment(data.interventions.find(x=>x.id==='${i.id}').attachments[${ai}].data,'${a.name}','${a.type}')" href="javascript:void(0)">${icon} ${a.name.length>14?a.name.substring(0,12)+'…':a.name}</a>`;
+    }).join(''):'';
+    return `<tr>
+      <td style="font-family:'DM Mono',monospace;font-size:11px">${new Date(i.date).toLocaleDateString(lang==='fr'?'fr-FR':'en-GB')}</td>
+      <td><span class="tag" style="background:${TC()[i.type]||'#888'}22;color:${TC()[i.type]||'#888'}">${i.type}</span></td>
+      <td style="color:var(--muted);font-size:11px">${i.desc||'—'}${i.simOld?`<div style="margin-top:4px;font-family:'DM Mono',monospace;font-size:10px;"><span style="color:var(--muted)">🔴 ${i.simOld}</span> → <span style="color:#2ec97b">🟢 ${i.simNew}</span></div>`:''}</td>
+      <td style="font-size:11px;font-weight:600">${i.tech||'—'}</td>
+      <td style="font-size:11px;line-height:1.6">${fD(i.cost)}</td>
+      <td>${hasA?`<div class="attach-chips">${chips}</div>`:'—'}</td>
+      <td style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted)">${i.addedBy||'—'}</td>
+      ${isAdmin?`<td style="display:flex;gap:4px;"><button class="dbtn ebtn" onclick="openEditI('${i.id}')" title="Modifier">✏️</button><button class="dbtn" onclick="delI('${i.id}')" title="Supprimer">✕</button></td>`:''}
+    </tr>`;
+  }).join('');
+
+  // Numéros de pages
+  let pgBtns = '';
+  if(totalPages > 1){
+    pgBtns += `<button class="pg-btn" onclick="goPage(${curPage-1})" ${curPage===1?'disabled':''}>‹</button>`;
+    // Afficher au max 7 numéros avec ellipses
+    let pages = [];
+    if(totalPages <= 7){
+      pages = Array.from({length:totalPages},(_,i)=>i+1);
+    } else {
+      pages = [1];
+      if(curPage > 3) pages.push('…');
+      for(let p=Math.max(2,curPage-1); p<=Math.min(totalPages-1,curPage+1); p++) pages.push(p);
+      if(curPage < totalPages-2) pages.push('…');
+      pages.push(totalPages);
+    }
+    pages.forEach(p=>{
+      if(p==='…') pgBtns+=`<span class="pg-info">…</span>`;
+      else pgBtns+=`<button class="pg-btn ${p===curPage?'active':''}" onclick="goPage(${p})">${p}</button>`;
+    });
+    pgBtns += `<button class="pg-btn" onclick="goPage(${curPage+1})" ${curPage===totalPages?'disabled':''}>›</button>`;
+  }
+
+  const start=(curPage-1)*PAGE_SIZE+1;
+  const end=Math.min(curPage*PAGE_SIZE, ii.length);
+  const infoTxt = totalPages>1 ? `<span class="pg-info">${start}–${end} / ${ii.length}</span>` : '';
+
+  return `<table><thead><tr>
+    <th>${L.cD}</th><th>${L.cT}</th><th>${L.cDe}</th><th>${L.cTe||'Technicien'}</th>
+    <th>${L.cCo}</th><th>${L.cAt||'Fichiers'}</th><th>${L.cBy||'Par'}</th>
+    ${isAdmin?'<th></th>':''}
+  </tr></thead><tbody>${rows}</tbody></table>
+  ${totalPages>1?`<div class="pagination">${infoTxt}${pgBtns}</div>`:''}`;
+}
+// ══════════════════════════════════════════════
+
 function renderDet(id){
   const L=T(),isAdmin=currentUser?.role==='admin';
   const v=data.vehicles.find(x=>x.id===id);if(!v)return;
   const ii=data.interventions.filter(i=>i.vehicleId===id&&new Date(i.date).getFullYear()===curYear).sort((a,b)=>new Date(b.date)-new Date(a.date));
+  if(renderDet._lastId!==id||renderDet._lastYear!==curYear){curPage=1;}renderDet._lastId=id;renderDet._lastYear=curYear;
   const cost=ii.reduce((s,i)=>s+(i.cost||0),0);
   const tc={};ii.forEach(i=>{tc[i.type]=(tc[i.type]||0)+1;});const mx=Math.max(1,...Object.values(tc));
   const mc=Array(12).fill(0);ii.forEach(i=>{mc[new Date(i.date).getMonth()]++;});const mxm=Math.max(1,...mc);
@@ -2720,29 +2801,9 @@ function renderDet(id){
     <div class="csec"><div class="stit">${L.cByT}</div><div class="tbrs">${Object.entries(tc).sort((a,b)=>b[1]-a[1]).map(([tp,c])=>`<div class="trow"><div class="tlbl">${tp}</div><div class="tbb"><div class="tbf" style="width:${(c/mx)*100}%;background:${TC()[tp]||'#888'}"></div></div><div class="tcnt">${c}</div></div>`).join('')}</div></div>
     <div class="csec"><div class="stit">${L.cMon} ${curYear}</div><div class="mch">${mc.map((c,m)=>`<div class="mcc"><div class="mb" style="height:${c?(c/mxm)*100:2}%"></div><div class="mlbl">${L.months[m]}</div></div>`).join('')}</div></div>`:''}
     <div class="isec"><div class="ihdr"><div class="stit" style="margin:0">${L.hist}</div><button class="btn-g" onclick="openAddI()">${L.btnGi}</button></div>
-    ${ii.length?`<table><thead><tr><th>${L.cD}</th><th>${L.cT}</th><th>${L.cDe}</th><th>${L.cTe||'Technicien'}</th><th>${L.cCo}</th><th>${L.cAt||'Fichiers'}</th><th>${L.cBy||'Par'}</th>${isAdmin?'<th></th>':''}</tr></thead><tbody>
-      ${ii.map(i=>{
-        const hasA=i.attachments&&i.attachments.length>0;
-        const chips=hasA?i.attachments.map((a,ai)=>{
-          const isImg=a.type&&a.type.startsWith('image/');
-          const isXls2=a.name&&a.name.match(/\.xlsx?$|csv$/i);
-          const isPpt2=a.name&&a.name.match(/\.pptx?$/i);
-          const icon=isImg?'🖼':isXls2?'📊':isPpt2?'📑':'📄';
-          const cls=isImg?'attach-chip attach-chip-img':'attach-chip attach-chip-pdf';
-          return `<a class="${cls}" onclick="viewAttachment(data.interventions.find(x=>x.id==='${i.id}').attachments[${ai}].data,'${a.name}','${a.type}')" href="javascript:void(0)">${icon} ${a.name.length>14?a.name.substring(0,12)+'…':a.name}</a>`;
-        }).join(''):'';
-        return `<tr>
-          <td style="font-family:'DM Mono',monospace;font-size:11px">${new Date(i.date).toLocaleDateString(lang==='fr'?'fr-FR':'en-GB')}</td>
-          <td><span class="tag" style="background:${TC()[i.type]||'#888'}22;color:${TC()[i.type]||'#888'}">${i.type}</span></td>
-          <td style="color:var(--muted);font-size:11px">${i.desc||'—'}${i.simOld?`<div style="margin-top:4px;font-family:'DM Mono',monospace;font-size:10px;"><span style="color:var(--muted)">🔴 ${i.simOld}</span> → <span style="color:#2ec97b">🟢 ${i.simNew}</span></div>`:''}</td>
-          <td style="font-size:11px;font-weight:600">${i.tech||'—'}</td>
-          <td style="font-size:11px;line-height:1.6">${fD(i.cost)}</td>
-          <td>${hasA?`<div class="attach-chips">${chips}</div>`:'—'}</td>
-          <td style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted)">${i.addedBy||'—'}</td>
-          ${isAdmin?`<td style="display:flex;gap:4px;"><button class="dbtn ebtn" onclick="openEditI('${i.id}')" title="Modifier">✏️</button><button class="dbtn" onclick="delI('${i.id}')" title="Supprimer">✕</button></td>`:''}
-        </tr>`;
-      }).join('')}
-    </tbody></table>`:`<div style="padding:26px;text-align:center;color:var(--muted);font-size:12px;">${L.noI} ${curYear}</div>`}
+    ${ii.length?`
+    ${renderInterventionsPage(ii,isAdmin,L)}
+    `:`<div style="padding:26px;text-align:center;color:var(--muted);font-size:12px;">${L.noI} ${curYear}</div>`}
     </div>`;
 }
 
