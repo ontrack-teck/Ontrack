@@ -907,19 +907,33 @@ const FB = {
       await fetch(`${FB_URL}/${path}.json`, {method:'DELETE'});
     } catch(e) {}
   },
-  // Polling toutes les 3s pour simuler le temps réel
+  // Polling toutes les 10s — verrou pour éviter conflit lecture/écriture
   _polls: {},
+  _writing: {},  // verrou par path
+  _lastVal: {},  // dernière valeur connue par path
   on: (path, cb) => {
     if(FB._polls[path]) clearInterval(FB._polls[path]);
     const poll = async () => {
+      if(FB._writing[path]) return; // Ne pas lire pendant une écriture
       const val = await FB.get(path);
+      const newStr = JSON.stringify(val);
+      if(newStr === FB._lastVal[path]) return; // Pas de changement → pas de re-render
+      FB._lastVal[path] = newStr;
       cb(val);
     };
     poll(); // appel immédiat
-    FB._polls[path] = setInterval(poll, 3000);
+    FB._polls[path] = setInterval(poll, 10000); // 10s au lieu de 3s
   },
   off: (path) => {
     if(FB._polls[path]){ clearInterval(FB._polls[path]); delete FB._polls[path]; }
+    delete FB._lastVal[path];
+    delete FB._writing[path];
+  },
+  lockWrite: (path) => { FB._writing[path] = true; },
+  unlockWrite: (path) => { 
+    delete FB._writing[path];
+    // Invalider le cache pour forcer une relecture après écriture
+    delete FB._lastVal[path];
   }
 };
 
@@ -955,7 +969,12 @@ let currentBase='ONTRACK'; // id of active base
 const bKey=k=>`${currentBase}__${k}`;
 let _usersCache = null;
 const getUsers=()=>_usersCache||[];
-const setUsers=async u=>{ _usersCache=u; await FB.set(bKey('users'),u); };
+const setUsers=async u=>{
+  _usersCache=u;
+  const path=bKey('users');
+  FB.lockWrite(path);
+  try{ await FB.set(path,u); }finally{ FB.unlockWrite(path); }
+};
 // Multi-session: stocke un tableau de sessions actives sur cet appareil
 const getSessions=()=>LS.get('sgo_sessions')||[];
 const setSessions=s=>LS.set('sgo_sessions',s);
@@ -1565,7 +1584,12 @@ let lang=localStorage.getItem('sgo_lang')||'fr';
 const DEFAULT_EUR=655.957;
 let _cfgCache = null;
 const getCfg=()=>_cfgCache||{};
-const saveCfg=async cfg=>{ _cfgCache=cfg; await FB.set(bKey('config'),cfg); };
+const saveCfg=async cfg=>{
+  _cfgCache=cfg;
+  const path=bKey('config');
+  FB.lockWrite(path);
+  try{ await FB.set(path,cfg); }finally{ FB.unlockWrite(path); }
+};
 function loadBaseData(skipRender){
   selVid=null;editVid=null;curYear=new Date().getFullYear();curTab='flotte';
   Object.values(charts).forEach(ch=>{try{ch.destroy();}catch(e){}});charts={};
@@ -1605,7 +1629,11 @@ const getVTypes=(lang)=>{const cfg=getCfg();return cfg?.vtypes?.[lang]||cfg?.vty
 const fE=v=>v?v.toLocaleString('fr-FR')+' €':'—';
 const fC=v=>v?Math.round(v*getEUR()).toLocaleString('fr-FR')+'\u202fFCFA':'\u2014';
 const fD=v=>v?`<span style="font-weight:700">${fE(v)}</span>&nbsp;<span style="color:var(--muted);font-size:10px">/ ${fC(v)}</span>`:'—';
-const saveD=()=>{ FB.set(bKey('fleet'),data); };
+const saveD=()=>{
+  const path=bKey('fleet');
+  FB.lockWrite(path);
+  FB.set(path,data).finally(()=>FB.unlockWrite(path));
+};
 const validEmail=e=>/^[^@]+@[^@]+\.[^@]+$/.test(e);
 
 // ═══════════════════ I18N ═══════════════════
