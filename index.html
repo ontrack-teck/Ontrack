@@ -3094,7 +3094,19 @@ document.getElementById('viewerMo')?.addEventListener('click',e=>{
 
 function cfaPrev(){const v=parseFloat(document.getElementById('iCost').value)||0;const p=document.getElementById('cfaP');if(p)p.textContent=v>0?`${T().cfaPfx} ${Math.round(v*getEUR()).toLocaleString('fr-FR')} FCFA`:'';}
 
-function openAddV(){document.getElementById('vName').value='';document.getElementById('vPlate').value='';document.getElementById('moV').classList.add('open');}
+function openAddV(){
+  // S'assurer que les selects sont peuplés (config peut ne pas encore être chargée)
+  populateSels();
+  // Si vType est toujours vide, utiliser les types par défaut
+  const vs=document.getElementById('vType');
+  if(vs && vs.options.length===0){
+    const defaults=lang==='en'?DEFAULT_VTYPES_EN:DEFAULT_VTYPES_FR;
+    vs.innerHTML=defaults.map(v=>`<option>${v}</option>`).join('');
+  }
+  document.getElementById('vName').value='';
+  document.getElementById('vPlate').value='';
+  document.getElementById('moV').classList.add('open');
+}
 function openEditV(id){
   const v=data.vehicles.find(x=>x.id===id);if(!v)return;
   editVid=id;
@@ -3139,7 +3151,10 @@ function openAddI(){
 function closeMo(id){document.getElementById(id).classList.remove('open');}
 
 function saveV(){
-  const n=document.getElementById('vName').value.trim(),p=document.getElementById('vPlate').value.trim(),t=document.getElementById('vType').value;
+  const n=document.getElementById('vName').value.trim();
+  const p=document.getElementById('vPlate').value.trim();
+  const vs=document.getElementById('vType');
+  const t=vs?.value||(lang==='en'?DEFAULT_VTYPES_EN[0]:DEFAULT_VTYPES_FR[0]);
   if(!n){alert(T().alertN);return;}
   const v={id:uid(),name:n,plate:p,type:t,createdBy:currentUser?.email,createdAt:new Date().toISOString()};
   data.vehicles.push(v);
