@@ -1540,7 +1540,17 @@ function chgPw(){
   if(hash(op)!==u.h){msg.textContent=T().errWrongPw;msg.classList.add('err');return;}
   if(np.length<6){msg.textContent=T().errShort;msg.classList.add('err');return;}
   if(np!==cp){msg.textContent=T().errMatch;msg.classList.add('err');return;}
-  u.h=hash(np);setUsers(users);
+  const newHash=hash(np);
+  u.h=newHash;
+  setUsers(users);
+  // Propager le nouveau hash vers TOUTES les bases
+  const allBases=getBases();
+  allBases.forEach(async b=>{
+    if(b.id===currentBase) return;
+    const bUsers=await FB.get(b.id+'__users')||[];
+    const bu=bUsers.find(x=>x.email===currentUser.email);
+    if(bu){ bu.h=newHash; await FB.set(b.id+'__users',bUsers); }
+  });
   ['apOp','apNp','apCp'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('apPwB').style.cssText='';document.getElementById('apPwH').textContent='';
   msg.textContent=T().okPw;msg.classList.add('ok');
