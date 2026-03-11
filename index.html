@@ -1109,21 +1109,25 @@ function renderAccountPicker(){
   }).join('');
 }
 
-function pickAccount(i){
+async function pickAccount(i){
   const stored=getSessions();
   const s=stored[i];
   if(!s) return;
   // Restaurer la base
   const bases=getBases();
   if(s.base&&bases.find(b=>b.id===s.base)) currentBase=s.base;
-  initConfig(); loadBaseData();
+  initConfig();
+  // Charger les users depuis Firebase pour avoir les tokens à jour
+  const fbUsers = await FB.get(bKey('users')) || [];
+  _usersCache = fbUsers;
   // Vérifier si le token est encore valide
-  const u=getUsers().find(u=>u.email===s.email&&userHasToken(u,s.tok)&&u.status==='active');
+  const u=fbUsers.find(u=>u.email===s.email&&userHasToken(u,s.tok)&&u.status==='active');
   if(u){
     // Token valide → connexion directe
     currentUser={email:u.email,role:u.role};
-    setSession({email:u.email,tok:u.tok,base:currentBase});
+    setSession({email:u.email,tok:s.tok,base:currentBase});
     document.getElementById('scrPick').classList.remove('on');
+    loadBaseData();
     showApp();
   } else {
     // Token expiré ou mdp changé → demander mdp
@@ -1236,15 +1240,16 @@ function doFirstLogin(){
   u.h=pwHash;u.status='active';
   setUserToken(u, DEVICE_ID, tok);
   setUsers(users);
-  // Propager le hash vers toutes les bases où l'user est en attente
+  // Propager uniquement le hash (pas le token) vers les autres bases en attente
   const allBases=getBases();
   allBases.forEach(async b=>{
     if(b.id===currentBase) return;
     const bUsers=await FB.get(b.id+'__users')||[];
     const bu=bUsers.find(x=>x.email===em);
-    if(bu){
+    if(bu && bu.status==='pending'){
       bu.h=pwHash;
-      if(bu.status==='pending') bu.status='active';
+      bu.status='active';
+      // Ne pas toucher au tok des autres bases
       await FB.set(b.id+'__users',bUsers);
     }
   });
@@ -1293,18 +1298,12 @@ function doLogin(){
     }
   });
   const tok=uid();
+  // Mettre à jour le token uniquement dans la base courante
   const allUsers=getUsers();
   const loginUser=allUsers.find(x=>x.email===em);
   setUserToken(loginUser, DEVICE_ID, tok);
   setUsers(allUsers);
-  // Propager le nouveau token vers toutes les autres bases (sans écraser h ni autres tokens)
-  const allBasesT=getBases();
-  allBasesT.forEach(async b=>{
-    if(b.id===currentBase) return;
-    const bUsers=await FB.get(b.id+'__users')||[];
-    const bu=bUsers.find(x=>x.email===em);
-    if(bu){ setUserToken(bu, DEVICE_ID, tok); await FB.set(b.id+'__users',bUsers); }
-  });
+  // NE PAS propager le tok vers les autres bases — chaque base gère ses propres tokens
   setSession({email:em,tok,base:currentBase});
   currentUser={email:em,role:u.role};
   addSession({email:em,tok,base:currentBase});
