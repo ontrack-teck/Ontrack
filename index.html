@@ -1258,6 +1258,14 @@ function doLogin(){
   });
   const tok=uid();
   const allUsers=getUsers();allUsers.find(x=>x.email===em).tok=tok;setUsers(allUsers);
+  // Propager le nouveau token vers toutes les autres bases (sans écraser h)
+  const allBasesT=getBases();
+  allBasesT.forEach(async b=>{
+    if(b.id===currentBase) return;
+    const bUsers=await FB.get(b.id+'__users')||[];
+    const bu=bUsers.find(x=>x.email===em);
+    if(bu){ bu.tok=tok; await FB.set(b.id+'__users',bUsers); }
+  });
   setSession({email:em,tok,base:currentBase});
   currentUser={email:em,role:u.role};
   addSession({email:em,tok,base:currentBase});
@@ -1682,18 +1690,10 @@ function renderBaseBar(){
 
 function switchBase(id){
   // Arrêter l'écoute de l'ancienne base
-  try{ FB.off(bKey('fleet')); FB.off(bKey('users')); }catch(e){}
+  try{ FB.off(bKey('fleet')); FB.off(bKey('users')); FB.off(bKey('config')); }catch(e){}
   _usersCache=null; _cfgCache=null;
   if(id===currentBase)return;
   currentBase=id;
-  // S'assurer que l'admin existe dans cette base
-  try{
-    const users=getUsers();
-    if(currentUser && !users.find(u=>u.email===currentUser.email)){
-      const newUsers=[...users,{email:currentUser.email,h:null,role:'admin',status:'active',tok:currentUser.tok||null}];
-      setUsers(newUsers);
-    }
-  }catch(e){}
   loadBaseData();
   // Update session base
   const sess=getSession();if(sess){sess.base=id;setSession(sess);}
