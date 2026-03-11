@@ -1049,6 +1049,31 @@ function stopInactivityWatch(){
 function hash(s){let h=0;for(let i=0;i<s.length;i++)h=Math.imul(31,h)+s.charCodeAt(i)|0;return h.toString(16);}
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2);
 
+// Identifiant unique et persistant pour cet appareil/navigateur
+function getDeviceId(){
+  let did=localStorage.getItem('sgo_device_id');
+  if(!did){ did=uid(); localStorage.setItem('sgo_device_id',did); }
+  return did;
+}
+const DEVICE_ID=getDeviceId();
+
+// Helpers tokens multi-appareils
+function userHasToken(u, tok){
+  if(!tok) return false;
+  // Nouveau format: u.tokens = {deviceId: tok}
+  if(u.tokens && typeof u.tokens==='object') return Object.values(u.tokens).includes(tok);
+  // Ancien format: u.tok (rétrocompatibilité)
+  return u.tok===tok;
+}
+function setUserToken(u, deviceId, tok){
+  if(!u.tokens || typeof u.tokens!=='object') u.tokens={};
+  u.tokens[deviceId]=tok;
+  u.tok=tok; // garder pour rétrocompatibilité
+}
+function removeUserToken(u, deviceId){
+  if(u.tokens && typeof u.tokens==='object') delete u.tokens[deviceId];
+}
+
 function togPw(id,btn){const i=document.getElementById(id);i.type=i.type==='password'?'text':'password';btn.textContent=i.type==='password'?'👁':'🙈';}
 
 function pwStr(iid,bid,hid){
@@ -1093,7 +1118,7 @@ function pickAccount(i){
   if(s.base&&bases.find(b=>b.id===s.base)) currentBase=s.base;
   initConfig(); loadBaseData();
   // Vérifier si le token est encore valide
-  const u=getUsers().find(u=>u.email===s.email&&u.tok===s.tok&&u.status==='active');
+  const u=getUsers().find(u=>u.email===s.email&&userHasToken(u,s.tok)&&u.status==='active');
   if(u){
     // Token valide → connexion directe
     currentUser={email:u.email,role:u.role};
@@ -1151,7 +1176,7 @@ function boot(){
 
   // Session active → connexion automatique
   if(_sess){
-    const u=getUsers().find(u=>u.tok===_sess.tok&&u.email===_sess.email);
+    const u=getUsers().find(u=>u.email===_sess.email&&userHasToken(u,_sess.tok));
     if(u&&u.status==='active'){currentUser={email:u.email,role:u.role};showApp();return;}
   }
 
@@ -1185,7 +1210,9 @@ function doSetup(){
   if(pw.length<6){err.textContent=T().errShort;err.classList.add('on');return;}
   if(pw!==pw2){err.textContent=T().errMatch;err.classList.add('on');return;}
   const tok=uid();
-  setUsers([{email:em,h:hash(pw),role:'admin',status:'active',tok}]);
+  const adminUser={email:em,h:hash(pw),role:'admin',status:'active',tok};
+  setUserToken(adminUser, DEVICE_ID, tok);
+  setUsers([adminUser]);
   setSession({email:em,tok,base:currentBase});
   currentUser={email:em,role:'admin'};
   addSession({email:em,tok,base:currentBase});
@@ -1206,7 +1233,8 @@ function doFirstLogin(){
   if(pw!==pw2){err.textContent=T().errMatch;err.classList.add('on');return;}
   const tok=uid();
   const pwHash=hash(pw);
-  u.h=pwHash;u.status='active';u.tok=tok;
+  u.h=pwHash;u.status='active';
+  setUserToken(u, DEVICE_ID, tok);
   setUsers(users);
   // Propager le hash vers toutes les bases où l'user est en attente
   const allBases=getBases();
@@ -1265,14 +1293,17 @@ function doLogin(){
     }
   });
   const tok=uid();
-  const allUsers=getUsers();allUsers.find(x=>x.email===em).tok=tok;setUsers(allUsers);
-  // Propager le nouveau token vers toutes les autres bases (sans écraser h)
+  const allUsers=getUsers();
+  const loginUser=allUsers.find(x=>x.email===em);
+  setUserToken(loginUser, DEVICE_ID, tok);
+  setUsers(allUsers);
+  // Propager le nouveau token vers toutes les autres bases (sans écraser h ni autres tokens)
   const allBasesT=getBases();
   allBasesT.forEach(async b=>{
     if(b.id===currentBase) return;
     const bUsers=await FB.get(b.id+'__users')||[];
     const bu=bUsers.find(x=>x.email===em);
-    if(bu){ bu.tok=tok; await FB.set(b.id+'__users',bUsers); }
+    if(bu){ setUserToken(bu, DEVICE_ID, tok); await FB.set(b.id+'__users',bUsers); }
   });
   setSession({email:em,tok,base:currentBase});
   currentUser={email:em,role:u.role};
@@ -1283,8 +1314,13 @@ function doLogin(){
 
 function doLogout(){
   stopInactivityWatch();
-  // Déconnexion totale : supprime aussi la session du picker
-  if(currentUser) removeStoredSession(currentUser.email);
+  // Supprimer le token de cet appareil uniquement dans Firebase
+  if(currentUser){
+    const users=getUsers();
+    const u=users.find(x=>x.email===currentUser.email);
+    if(u){ removeUserToken(u, DEVICE_ID); setUsers(users); }
+    removeStoredSession(currentUser.email);
+  }
   setSession(null);
   currentUser=null;
   document.getElementById('shell').classList.remove('on');
