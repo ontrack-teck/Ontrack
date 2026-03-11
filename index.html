@@ -1629,10 +1629,16 @@ const getVTypes=(lang)=>{const cfg=getCfg();return cfg?.vtypes?.[lang]||cfg?.vty
 const fE=v=>v?v.toLocaleString('fr-FR')+' €':'—';
 const fC=v=>v?Math.round(v*getEUR()).toLocaleString('fr-FR')+'\u202fFCFA':'\u2014';
 const fD=v=>v?`<span style="font-weight:700">${fE(v)}</span>&nbsp;<span style="color:var(--muted);font-size:10px">/ ${fC(v)}</span>`:'—';
-const saveD=()=>{
+const saveD=async ()=>{
   const path=bKey('fleet');
   FB.lockWrite(path);
-  FB.set(path,data).finally(()=>FB.unlockWrite(path));
+  try{
+    await FB.set(path, JSON.parse(JSON.stringify(data))); // deep copy pour éviter mutation
+  } finally {
+    FB.unlockWrite(path);
+    // Mettre à jour le cache lastVal pour éviter re-render parasite du polling
+    FB._lastVal[path] = JSON.stringify(data);
+  }
 };
 const validEmail=e=>/^[^@]+@[^@]+\.[^@]+$/.test(e);
 
@@ -3133,10 +3139,14 @@ function openAddI(){
 function closeMo(id){document.getElementById(id).classList.remove('open');}
 
 function saveV(){
-  if(currentUser?.role!=='admin')return;
   const n=document.getElementById('vName').value.trim(),p=document.getElementById('vPlate').value.trim(),t=document.getElementById('vType').value;
   if(!n){alert(T().alertN);return;}
-  const v={id:uid(),name:n,plate:p,type:t,createdBy:currentUser?.email,createdAt:new Date().toISOString()};data.vehicles.push(v);saveD();closeMo('moV');selVid=v.id;render();
+  const v={id:uid(),name:n,plate:p,type:t,createdBy:currentUser?.email,createdAt:new Date().toISOString()};
+  data.vehicles.push(v);
+  saveD();
+  closeMo('moV');
+  selVid=v.id;
+  render();
 }
 function saveI(){
   const d=document.getElementById('iDate').value,tp=document.getElementById('iType').value,de=document.getElementById('iDesc').value.trim(),co=parseFloat(document.getElementById('iCost').value)||0;
