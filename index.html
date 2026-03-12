@@ -1446,7 +1446,7 @@ function showApp(){
   safe2('shell',el=>el.classList.add('on'));
   safe2('hUser',el=>el.textContent=currentUser.email);
   const nb=document.getElementById('notifBtn');
-  if(nb) nb.style.display=isAdmin?'':'none';
+  if(nb) nb.style.display=canDo('manageConfig')?'':'none';
   safe2('btnAV',el=>el.style.display=canDo('createVehicle')?'':'none');
   safe2('admBtn',el=>el.style.display='');
   safe2('aptUsers',el=>el.style.display=canDo('manageUsers')?'':'none');
@@ -3582,7 +3582,7 @@ function loadEmailJSConfig(){
 }
 
 function openNotifModal(){
-  if(currentUser?.role !== 'admin') return;
+  if(!canDo('manageConfig')) return;
   document.getElementById('notifSubject').value = '';
   document.getElementById('notifBody').value = '';
   document.getElementById('notifStatus').textContent = '';
