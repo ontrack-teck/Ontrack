@@ -880,10 +880,27 @@ const LS={
 // Firebase via fetch REST API — fonctionne en file:// sans CDN
 const FB_URL = "https://ontrack-flottes-default-rtdb.firebaseio.com";
 const FB = {
+  // Normalise les données Firebase : reconvertit les objects {0,1,2} en arrays
+  _normalize: (obj) => {
+    if(obj === null || obj === undefined) return obj;
+    if(Array.isArray(obj)) return obj.map(FB._normalize);
+    if(typeof obj === 'object'){
+      const keys = Object.keys(obj);
+      // Si toutes les clés sont des entiers consécutifs → c'est un array
+      const isArr = keys.length > 0 && keys.every((k,i) => parseInt(k) === i);
+      if(isArr) return keys.map(k => FB._normalize(obj[k]));
+      const out = {};
+      keys.forEach(k => out[k] = FB._normalize(obj[k]));
+      return out;
+    }
+    return obj;
+  },
   get: async (path) => {
     try {
       const r = await fetch(`${FB_URL}/${path}.json`);
-      return r.ok ? r.json() : null;
+      if(!r.ok) return null;
+      const raw = await r.json();
+      return FB._normalize(raw);
     } catch(e) { return null; }
   },
   set: async (path, val) => {
