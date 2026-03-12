@@ -501,12 +501,19 @@ tbody td{padding:11px 17px;font-size:12px;}
     <select id="platformSel" style="display:none;"></select>
     <select id="yearFilter" class="ysel"></select>
     <select id="langSel" class="lsel" onchange="setLang(this.value)"><option value="fr">🇫🇷 FR</option><option value="en">🇬🇧 EN</option></select>
-    <button class="hdrbtn" id="reportBtn" onclick="openReportModal()" title="Télécharger un rapport">📥</button>
-    <button class="hdrbtn" id="notifBtn" onclick="openNotifModal()" title="Notifier les utilisateurs" style="display:none;">📢</button>
     <button class="hdrbtn" id="admBtn" onclick="openAdm()">⚙️ <span id="hUser"></span></button>
     <span id="inactBadge" style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);padding:4px 8px;background:var(--surface2);border:1px solid var(--border);border-radius:12px;display:none;">⏱ <span id="inactTime">15:00</span></span>
-    <button class="outbtn sw-btn" onclick="switchAccount()" id="swBtn" title="Changer de compte">⇄</button>
-    <button class="outbtn" onclick="doLogout()" id="outBtn" title="Déconnecter">⏻</button>
+    <!-- Menu 3 points -->
+    <div style="position:relative;">
+      <button class="outbtn" id="moreBtn" onclick="toggleMoreMenu()" title="Plus d'options" style="font-size:18px;letter-spacing:1px;padding:6px 10px;">⋮</button>
+      <div id="moreMenu" style="display:none;position:absolute;top:calc(100% + 6px);right:0;z-index:999;background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:6px;min-width:200px;box-shadow:0 8px 24px rgba(0,0,0,.4);">
+        <button id="mm_report" onclick="openReportModal();closeMoreMenu()" style="display:flex;align-items:center;gap:10px;width:100%;background:none;border:none;color:var(--text);padding:10px 12px;border-radius:8px;cursor:pointer;font-family:'Syne',sans-serif;font-size:13px;text-align:left;" onmouseover="this.style.background='var(--surface)'" onmouseout="this.style.background='none'">📥 Télécharger un rapport</button>
+        <button id="mm_notif" onclick="openNotifModal();closeMoreMenu()" style="display:none;align-items:center;gap:10px;width:100%;background:none;border:none;color:var(--text);padding:10px 12px;border-radius:8px;cursor:pointer;font-family:'Syne',sans-serif;font-size:13px;text-align:left;" onmouseover="this.style.background='var(--surface)'" onmouseout="this.style.background='none'">📢 Notifier les utilisateurs</button>
+        <div style="height:1px;background:var(--border);margin:4px 0;"></div>
+        <button onclick="switchAccount();closeMoreMenu()" style="display:flex;align-items:center;gap:10px;width:100%;background:none;border:none;color:var(--text);padding:10px 12px;border-radius:8px;cursor:pointer;font-family:'Syne',sans-serif;font-size:13px;text-align:left;" onmouseover="this.style.background='var(--surface)'" onmouseout="this.style.background='none'">⇄ Changer de compte</button>
+        <button onclick="doLogout();closeMoreMenu()" style="display:flex;align-items:center;gap:10px;width:100%;background:none;border:none;color:#e05a2b;padding:10px 12px;border-radius:8px;cursor:pointer;font-family:'Syne',sans-serif;font-size:13px;text-align:left;" onmouseover="this.style.background='var(--surface)'" onmouseout="this.style.background='none'">⏻ Déconnecter</button>
+      </div>
+    </div>
   </div>
 </header>
 
@@ -1442,8 +1449,8 @@ function showApp(){
   const safe2=(id,fn)=>{const el=document.getElementById(id);if(el)fn(el);};
   safe2('shell',el=>el.classList.add('on'));
   safe2('hUser',el=>el.textContent=currentUser.email);
-  const nb=document.getElementById('notifBtn');
-  if(nb) nb.style.display=canDo('manageConfig')?'':'none';
+  const nb=document.getElementById('mm_notif');
+  if(nb) nb.style.display=canDo('manageConfig')?'flex':'none';
   safe2('btnAV',el=>el.style.display=canDo('createVehicle')?'':'none');
   safe2('admBtn',el=>el.style.display='');
   safe2('aptUsers',el=>el.style.display=canDo('manageUsers')?'':'none');
@@ -1968,6 +1975,23 @@ const T=()=>LANGS[lang];
 // ══════════════════════════════════════════════
 // MULTI-BASE FUNCTIONS
 // ══════════════════════════════════════════════
+function toggleMoreMenu(){
+  const m=document.getElementById('moreMenu');
+  if(!m) return;
+  m.style.display = m.style.display==='none' ? 'block' : 'none';
+}
+function closeMoreMenu(){
+  const m=document.getElementById('moreMenu');
+  if(m) m.style.display='none';
+}
+document.addEventListener('click', e=>{
+  const menu=document.getElementById('moreMenu');
+  const btn=document.getElementById('moreBtn');
+  if(menu && btn && !menu.contains(e.target) && !btn.contains(e.target)){
+    menu.style.display='none';
+  }
+});
+
 // ═══════════════════ PLATFORM SELECTION SCREEN ═══════════════════
 function goToPlatformScreen(){
   document.getElementById('shell').classList.remove('on');
