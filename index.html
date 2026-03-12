@@ -484,6 +484,8 @@ tbody td{padding:11px 17px;font-size:12px;}
   <span id="syncBadge" title="Synchronisation Firebase" style="font-size:10px;background:rgba(46,201,123,.15);color:#2ec97b;border-radius:20px;padding:3px 9px;margin-left:4px;display:none;">🔴 sync...</span>
   <div class="hctrls">
     <button class="hdrbtn" id="presenceBtn" onclick="togglePresencePanel()" title="Utilisateurs connectés" style="display:none;">🟢 <span id="presenceCount">0</span></button>
+    <label style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);margin-right:-6px;">PLATEFORME</label>
+    <select id="platformSel" class="bsel" onchange="switchPlatform(this.value)" title="Changer de plateforme" style="border-color:#f0a500;color:#f0a500;"></select>
     <label style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);margin-right:-6px;">BASE</label>
     <select id="baseSel" class="bsel" onchange="switchBase(this.value)" title="Changer de base"></select>
     <select id="yearFilter" class="ysel"></select>
@@ -996,9 +998,14 @@ async function checkFBConnection(){
 // Bases list stored globally (not per-base)
 // Bases — stockées dans Firebase + cache local
 let _basesCache = null;
-const getBases=()=>_basesCache||[{id:'ONTRACK',name:'ONTRACK',color:'#f0a500'}];
-const setBases=async b=>{ _basesCache=b; await FB.set('bases',b); };
-let currentBase='ONTRACK'; // id of active base
+const getBases=()=>_basesCache||[{id:'SGO',name:'SGO',color:'#f0a500'}];
+const setBases=async b=>{ _basesCache=b; await FB.set(currentPlatform+'__bases',b); };
+let currentBase='SGO'; // id of active base
+let currentPlatform='ZA'; // id of active platform
+let _platformsCache=null;
+const DEFAULT_PLATFORMS=[{id:'ZA',name:'ONTRACK (ZA)',color:'#f0a500'},{id:'ENT',name:'ONTRACK (ENT)',color:'#4a9eff'}];
+const getPlatforms=()=>_platformsCache||DEFAULT_PLATFORMS;
+const setPlatforms=async p=>{ _platformsCache=p; await FB.set('platforms',p); };
 
 // ── Per-base storage helpers ──────────────────────────
 const bKey=k=>`${currentBase}__${k}`;
@@ -1247,12 +1254,10 @@ function showLogin(){
 // ═══════════════════════════════════════════════════════
 
 function boot(){
-  // Restore base from session before anything else
+  // Restore platform and base from session
   const _sess=getSession();
-  if(_sess?.base){
-    const _bases=getBases();
-    if(_bases.find(b=>b.id===_sess.base)) currentBase=_sess.base;
-  }
+  if(_sess?.platform){ currentPlatform=_sess.platform; }
+  if(_sess?.base){ currentBase=_sess.base; }
   initConfig();
   loadBaseData();
 
@@ -1299,7 +1304,7 @@ function doSetup(){
   const adminUser={email:em,h:hash(pw),role:'admin',status:'active',tok};
   setUserToken(adminUser, DEVICE_ID, tok);
   setUsers([adminUser]);
-  setSession({email:em,tok,base:currentBase});
+  setSession({email:em,tok,base:currentBase,platform:currentPlatform});
   currentUser={email:em,role:'admin'};
   addSession({email:em,tok,base:currentBase});
   document.getElementById('scrSetup').classList.remove('on');
@@ -1335,7 +1340,7 @@ function doFirstLogin(){
       await FB.set(b.id+'__users',bUsers);
     }
   });
-  setSession({email:em,tok,base:currentBase});
+  setSession({email:em,tok,base:currentBase,platform:currentPlatform});
   currentUser={email:em,role:'user'};
   addSession({email:em,tok,base:currentBase});
   document.getElementById('scrFirst').classList.remove('on');
@@ -1386,7 +1391,7 @@ function doLogin(){
   setUserToken(loginUser, DEVICE_ID, tok);
   setUsers(allUsers);
   // NE PAS propager le tok vers les autres bases — chaque base gère ses propres tokens
-  setSession({email:em,tok,base:currentBase});
+  setSession({email:em,tok,base:currentBase,platform:currentPlatform});
   currentUser={email:em,role:u.role};
   addSession({email:em,tok,base:currentBase});
   document.getElementById('scrLogin').classList.remove('on');
@@ -1467,6 +1472,7 @@ function showApp(){
   safe2('paneUsers',el=>el.style.display=canDo('manageUsers')?'':'none');
   startInactivityWatch();
   startPresence();
+  renderPlatformBar();
   renderBaseBar();
   const _bases=getBases();const _cb=_bases.find(b=>b.id===currentBase);const _ls=document.getElementById('baseLogo');if(_ls&&_cb)_ls.textContent=_cb.name;
   applyT();populateSels();render();
@@ -1982,6 +1988,61 @@ const T=()=>LANGS[lang];
 // ══════════════════════════════════════════════
 // MULTI-BASE FUNCTIONS
 // ══════════════════════════════════════════════
+// ═══════════════════ PLATFORMS ═══════════════════
+async function loadPlatformBases(){
+  const fbBases = await FB.get(currentPlatform+'__bases').catch(()=>null);
+  if(fbBases && fbBases.length){
+    _basesCache = fbBases;
+  } else {
+    // Première fois sur cette plateforme : bases par défaut selon plateforme
+    if(currentPlatform==='ZA'){
+      const legacy = await FB.get('bases').catch(()=>null);
+      if(legacy && legacy.length){ _basesCache=legacy; await FB.set('ZA__bases',legacy); }
+      else { _basesCache=[{id:'SGO',name:'SGO',color:'#f0a500'}]; await FB.set('ZA__bases',_basesCache); }
+    } else {
+      _basesCache=[{id:currentPlatform+'_BASE1',name:'BASE 1',color:'#4a9eff'}];
+      await FB.set(currentPlatform+'__bases',_basesCache);
+    }
+  }
+  // S'assurer que currentBase appartient à la plateforme
+  if(!_basesCache.find(b=>b.id===currentBase)){
+    currentBase=_basesCache[0].id;
+  }
+  renderBaseBar();
+  renderSB();
+}
+
+function renderPlatformBar(){
+  const sel=document.getElementById('platformSel');if(!sel)return;
+  const plats=getPlatforms();
+  const p=plats.find(x=>x.id===currentPlatform);
+  const color=p?p.color:'#f0a500';
+  sel.innerHTML=plats.map(x=>`<option value="${x.id}" ${x.id===currentPlatform?'selected':''}>${x.name}</option>`).join('');
+  sel.style.borderColor=color;
+  sel.style.color=color;
+}
+
+async function switchPlatform(id){
+  if(id===currentPlatform) return;
+  // Quitter présence de l'ancienne plateforme/base
+  await stopPresence();
+  try{ FB.off(bKey('fleet')); FB.off(bKey('users')); FB.off(bKey('config')); }catch(e){}
+  _usersCache=null; _cfgCache=null; _basesCache=null;
+  // Arrêter tous les polls
+  Object.keys(FB._polls).forEach(p=>{ clearInterval(FB._polls[p]); delete FB._polls[p]; });
+  Object.keys(FB._lastVal).forEach(p=>delete FB._lastVal[p]);
+  Object.keys(FB._blockUntil).forEach(p=>delete FB._blockUntil[p]);
+  currentPlatform=id;
+  // Sauvegarder dans session
+  const sess=getSession();if(sess){sess.platform=id;setSession(sess);}
+  renderPlatformBar();
+  await loadPlatformBases();
+  loadBaseData();
+  startPresence();
+  render();
+}
+
+
 function renderBaseBar(){
   const bases=getBases();
   const isAdmin=currentUser?.role==='admin';
@@ -2079,7 +2140,7 @@ function addBase(){
   FB.set(id+'__config',{rate:655.957,itypes:DEFAULT_ITYPES,vtypes:{fr:DEFAULT_VTYPES_FR,en:DEFAULT_VTYPES_EN}});
   document.getElementById('newBaseName').value='';
   renderBaseList();renderBaseBar();
-  msg.textContent='✓ Base "'+name+'" créée avec les utilisateurs de ONTRACK.';msg.className='apmsg ok';
+  msg.textContent='✓ Base "'+name+'" créée dans '+currentPlatform+'.';msg.className='apmsg ok';
   setTimeout(()=>msg.textContent='',3000);
 }
 function deleteBase(i){
@@ -2103,18 +2164,21 @@ const DEFAULT_VTYPES_FR=["Camion", "Fourgon", "Voiture", "Engin TP", "Remorque",
 const DEFAULT_VTYPES_EN=["Truck", "Van", "Car", "Heavy equipment", "Trailer", "Other"];
 
 function initConfig(){
-  // Charger les bases depuis Firebase — source unique
-  FB.get('bases').then(fbBases=>{
-    if(fbBases && fbBases.length){
-      _basesCache = fbBases;
-      // Pas d'écriture localStorage
-      renderSB();
+  // Charger les plateformes depuis Firebase
+  FB.get('platforms').then(fbPlats=>{
+    if(fbPlats && fbPlats.length){ _platformsCache=fbPlats; }
+    else {
+      // Première fois : créer les plateformes par défaut
+      _platformsCache=DEFAULT_PLATFORMS;
+      FB.set('platforms', DEFAULT_PLATFORMS);
     }
-  }).catch(()=>{});
+    renderPlatformBar();
+    // Charger les bases de la plateforme courante
+    loadPlatformBases();
+  }).catch(()=>{ loadPlatformBases(); });
   // Charger config base courante depuis Firebase — source unique
   FB.get(bKey('config')).then(fbCfg=>{
     if(fbCfg){ _cfgCache=fbCfg; }
-    // Si aucune config dans Firebase, initialiser avec les valeurs par défaut
     else if(!_cfgCache){
       const defaultCfg={rate:655.957,itypes:DEFAULT_ITYPES,vtypes:{fr:DEFAULT_VTYPES_FR,en:DEFAULT_VTYPES_EN}};
       _cfgCache=defaultCfg;
