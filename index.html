@@ -1601,22 +1601,29 @@ function loadBaseData(skipRender){
   _usersCache=null;
   _cfgCache=null;
   if(!skipRender) render();
-  // Écouter Firebase — source unique de vérité
+  // Charger la flotte une fois au démarrage
   FB.off(bKey('fleet'));
-  FB.on(bKey('fleet'), fbData => {
-    if(fbData){
-      // Préserver selVid et curYear — ne pas réinitialiser lors du rechargement Firebase
-      const prevSelVid = selVid;
-      const prevYear = curYear;
-      data = fbData;
-      // Vérifier que le véhicule sélectionné existe toujours
-      if(prevSelVid && data.vehicles.find(v=>v.id===prevSelVid)){
-        selVid = prevSelVid;
-      }
-      curYear = prevYear;
-      render();
-    }
+  FB.get(bKey('fleet')).then(fbData => {
+    if(fbData){ data = fbData; render(); }
   });
+  // Puis polling toutes les 30s pour sync multi-appareils
+  if(FB._polls[bKey('fleet')]) clearInterval(FB._polls[bKey('fleet')]);
+  FB._polls[bKey('fleet')] = setInterval(async () => {
+    const path = bKey('fleet');
+    if(FB._blockUntil[path] && Date.now() < FB._blockUntil[path]) return;
+    const fbData = await FB.get(path);
+    if(!fbData) return;
+    const newStr = JSON.stringify(fbData);
+    if(newStr === FB._lastVal[path]) return; // Pas de changement
+    FB._lastVal[path] = newStr;
+    // Préserver selVid et curYear
+    const prevSelVid = selVid;
+    const prevYear = curYear;
+    data = fbData;
+    if(prevSelVid && data.vehicles?.find(v=>v.id===prevSelVid)) selVid = prevSelVid;
+    curYear = prevYear;
+    render();
+  }, 30000);
   FB.off(bKey('users'));
   FB.on(bKey('users'), fbUsers => {
     if(fbUsers){
