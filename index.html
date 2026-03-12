@@ -56,6 +56,7 @@ header{padding:13px 26px;border-bottom:1px solid var(--border);display:flex;alig
 .hctrls{display:flex;align-items:center;gap:9px;}
 .ysel,.lsel{font-family:'DM Mono',monospace;font-size:12px;color:var(--muted);background:var(--surface2);padding:5px 12px;border-radius:20px;border:1px solid var(--border);cursor:pointer;outline:none;}
 .lsel{color:var(--text);font-weight:700;font-size:13px;}
+.bsel{font-family:'DM Mono',monospace;font-size:12px;font-weight:700;background:var(--surface2);padding:5px 14px;border-radius:20px;border:2px solid #f0a500;cursor:pointer;outline:none;transition:border-color .3s,color .3s;}
 .hdrbtn{background:transparent;color:var(--muted);border:1px solid var(--border);padding:5px 12px;border-radius:20px;font-family:'Syne',sans-serif;font-size:12px;font-weight:600;cursor:pointer;transition:all .15s;display:flex;align-items:center;gap:5px;}
 .hdrbtn:hover{color:var(--text);border-color:var(--accent);}
 .outbtn{background:transparent;color:var(--muted);border:1px solid var(--border);padding:5px 12px;border-radius:20px;font-family:'Syne',sans-serif;font-size:12px;cursor:pointer;transition:all .15s;}
@@ -481,6 +482,8 @@ tbody td{padding:11px 17px;font-size:12px;}
   <div class="logo"><span id="baseLogo">ONTRACK</span><span id="hTitle">Gestion de Flotte</span></div>
   <span id="syncBadge" title="Synchronisation Firebase" style="font-size:10px;background:rgba(46,201,123,.15);color:#2ec97b;border-radius:20px;padding:3px 9px;margin-left:4px;display:none;">🔴 sync...</span>
   <div class="hctrls">
+    <label style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);margin-right:-6px;">BASE</label>
+    <select id="baseSel" class="bsel" onchange="switchBase(this.value)" title="Changer de base"></select>
     <select id="yearFilter" class="ysel"></select>
     <select id="langSel" class="lsel" onchange="setLang(this.value)"><option value="fr">🇫🇷 FR</option><option value="en">🇬🇧 EN</option></select>
     <button class="hdrbtn" id="reportBtn" onclick="openReportModal()" title="Télécharger un rapport">📥</button>
@@ -491,7 +494,7 @@ tbody td{padding:11px 17px;font-size:12px;}
     <button class="outbtn" onclick="doLogout()" id="outBtn" title="Déconnecter">⏻</button>
   </div>
 </header>
-<div class="base-bar" id="baseBar"></div>
+
 <div class="tnav">
   <button class="tbtn active" onclick="switchTab('flotte')" id="tabF">🚛 Flotte</button>
   <button class="tbtn" onclick="switchTab('interventions')" id="tabI">🔧 Interventions</button>
@@ -1870,15 +1873,17 @@ const T=()=>LANGS[lang];
 function renderBaseBar(){
   const bases=getBases();
   const isAdmin=currentUser?.role==='admin';
-  const bar=document.getElementById('baseBar');if(!bar)return;
-  bar.innerHTML=bases.map(b=>`
-    <button class="base-btn ${b.id===currentBase?'active':''}"
-      style="${b.id===currentBase?`background:${b.color};color:#000`:''}"
-      onclick="switchBase('${b.id}')">${b.name}</button>
-  `).join('')+(isAdmin?`<button class="base-add" onclick="openBM()">+ Base</button>`:'');
+  const sel=document.getElementById('baseSel');if(!sel)return;
+  const b=bases.find(x=>x.id===currentBase);
+  const color=b?b.color:'#f0a500';
+  sel.innerHTML=bases.map(x=>`<option value="${x.id}" ${x.id===currentBase?'selected':''}>${x.name}</option>`).join('')
+    +(isAdmin?`<option value="__add__">+ Nouvelle base</option>`:'');
+  sel.style.borderColor=color;
+  sel.style.color=color;
 }
 
 function switchBase(id){
+  if(id==='__add__'){openBM();renderBaseBar();return;}
   // Arrêter l'écoute de l'ancienne base
   try{ FB.off(bKey('fleet')); FB.off(bKey('users')); FB.off(bKey('config')); }catch(e){}
   _usersCache=null; _cfgCache=null;
