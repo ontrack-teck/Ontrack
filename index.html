@@ -1613,24 +1613,24 @@ const saveCfg=async cfg=>{
 function loadBaseData(skipRender){
   selVid=null;editVid=null;curYear=new Date().getFullYear();curTab='flotte';
   Object.values(charts).forEach(ch=>{try{ch.destroy();}catch(e){}});charts={};
-  // Réinitialiser les caches mémoire (pas localStorage)
+  // Arrêter TOUS les anciens polls et vider leurs caches
+  Object.keys(FB._polls).forEach(p=>{ clearInterval(FB._polls[p]); delete FB._polls[p]; });
+  Object.keys(FB._lastVal).forEach(p=>delete FB._lastVal[p]);
+  Object.keys(FB._blockUntil).forEach(p=>delete FB._blockUntil[p]);
+  // Réinitialiser les caches mémoire
   data={vehicles:[],interventions:[]};
   _usersCache=null;
   _cfgCache=null;
   if(!skipRender) render();
-  // Charger la flotte une fois au démarrage
-  FB.off(bKey('fleet'));
-  FB.get(bKey('fleet')).then(fbData => {
-    if(fbData && (fbData.vehicles || fbData.interventions)){
-      data = fbData;
-      // Initialiser _lastVal avec les données chargées
-      FB._lastVal[bKey('fleet')] = JSON.stringify(fbData);
-      render();
-    } else {
-      // Base vide : initialiser _lastVal avec la structure vide
-      // pour éviter que le polling détecte un faux "changement" après saveD
-      FB._lastVal[bKey('fleet')] = JSON.stringify({vehicles:[],interventions:[]});
-    }
+  // Charger la flotte depuis Firebase
+  const fleetPath = bKey('fleet');
+  FB.get(fleetPath).then(fbData => {
+    const vehicles = fbData?.vehicles || [];
+    const interventions = fbData?.interventions || [];
+    data = {vehicles, interventions};
+    // Initialiser _lastVal avec la structure normalisée
+    FB._lastVal[fleetPath] = JSON.stringify({vehicles, interventions});
+    render();
   });
   // Polling 60s — sync silencieuse UNIQUEMENT si l'utilisateur ne vient pas d'écrire
   if(FB._polls[bKey('fleet')]) clearInterval(FB._polls[bKey('fleet')]);
