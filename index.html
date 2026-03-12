@@ -2033,23 +2033,50 @@ async function loadPlatformBases(){
   const fbBases = await FB.get(currentPlatform+'__bases').catch(()=>null);
   if(fbBases && fbBases.length){
     _basesCache = fbBases;
+    // Vérifier que chaque base a l'admin
+    for(const b of _basesCache){
+      await ensureAdminInBase(b.id);
+    }
   } else {
-    // Première fois sur cette plateforme : bases par défaut selon plateforme
+    // Première fois sur cette plateforme
     if(currentPlatform==='ZA'){
       const legacy = await FB.get('bases').catch(()=>null);
       if(legacy && legacy.length){ _basesCache=legacy; await FB.set('ZA__bases',legacy); }
       else { _basesCache=[{id:'SGO',name:'SGO',color:'#f0a500'}]; await FB.set('ZA__bases',_basesCache); }
     } else {
-      _basesCache=[{id:currentPlatform+'_BASE1',name:'BASE 1',color:'#4a9eff'}];
+      const baseId = currentPlatform+'_BASE1';
+      _basesCache=[{id:baseId,name:'BASE 1',color:'#4a9eff'}];
       await FB.set(currentPlatform+'__bases',_basesCache);
+      // Copier TOUS les admins de ZA vers cette nouvelle base
+      await ensureAdminInBase(baseId);
     }
   }
-  // S'assurer que currentBase appartient à la plateforme
   if(!_basesCache.find(b=>b.id===currentBase)){
     currentBase=_basesCache[0].id;
   }
   renderBaseBar();
   renderSB();
+}
+
+async function ensureAdminInBase(baseId){
+  // Récupérer les admins depuis la base SGO (source de vérité)
+  const srcUsers = await FB.get('SGO__users').catch(()=>null) || [];
+  const admins = srcUsers.filter(u=>u.role==='admin');
+  if(!admins.length) return;
+  const existing = await FB.get(baseId+'__users').catch(()=>null) || [];
+  let changed = false;
+  for(const admin of admins){
+    const found = existing.find(u=>u.email===admin.email);
+    if(!found){
+      existing.push({email:admin.email, h:admin.h, role:'admin', status:'active', tok:null, tokens:{}});
+      changed = true;
+    } else if(found.h !== admin.h){
+      // Synchroniser le hash si différent
+      found.h = admin.h;
+      changed = true;
+    }
+  }
+  if(changed) await FB.set(baseId+'__users', existing);
 }
 
 function renderPlatformBar(){
