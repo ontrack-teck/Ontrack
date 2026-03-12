@@ -1602,8 +1602,15 @@ function loadBaseData(skipRender){
   FB.off(bKey('fleet'));
   FB.on(bKey('fleet'), fbData => {
     if(fbData){
+      // Préserver selVid et curYear — ne pas réinitialiser lors du rechargement Firebase
+      const prevSelVid = selVid;
+      const prevYear = curYear;
       data = fbData;
-      // Pas d'écriture localStorage — Firebase est la source
+      // Vérifier que le véhicule sélectionné existe toujours
+      if(prevSelVid && data.vehicles.find(v=>v.id===prevSelVid)){
+        selVid = prevSelVid;
+      }
+      curYear = prevYear;
       render();
     }
   });
@@ -3150,7 +3157,7 @@ function openAddI(){
 }
 function closeMo(id){document.getElementById(id).classList.remove('open');}
 
-function saveV(){
+async function saveV(){
   const n=document.getElementById('vName').value.trim();
   const p=document.getElementById('vPlate').value.trim();
   const vs=document.getElementById('vType');
@@ -3158,10 +3165,10 @@ function saveV(){
   if(!n){alert(T().alertN);return;}
   const v={id:uid(),name:n,plate:p,type:t,createdBy:currentUser?.email,createdAt:new Date().toISOString()};
   data.vehicles.push(v);
-  saveD();
+  selVid=v.id;  // Fixer selVid AVANT saveD pour que le listener préserve la sélection
   closeMo('moV');
-  selVid=v.id;
-  render();
+  render();     // Render immédiat pour afficher le véhicule
+  await saveD(); // Puis sauvegarder en arrière-plan
 }
 function saveI(){
   const d=document.getElementById('iDate').value,tp=document.getElementById('iType').value,de=document.getElementById('iDesc').value.trim(),co=parseFloat(document.getElementById('iCost').value)||0;
@@ -3180,10 +3187,8 @@ function saveI(){
   if(simRequired){iObj.simOld=simOld;iObj.simNew=simNew;}
   data.interventions.push(iObj);
   pendingAttachments=[];
-  try{saveD();}catch(e){
-    alert('Stockage insuffisant. Réduisez la taille des fichiers.');return;
-  }
   closeMo('moI');curYear=new Date(d).getFullYear();render();
+  saveD().catch(()=>alert('Erreur de sauvegarde.'));
 }
 function delV(id){
   if(currentUser?.role!=='admin')return;
