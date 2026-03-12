@@ -1604,7 +1604,16 @@ function loadBaseData(skipRender){
   // Charger la flotte une fois au démarrage
   FB.off(bKey('fleet'));
   FB.get(bKey('fleet')).then(fbData => {
-    if(fbData){ data = fbData; render(); }
+    if(fbData && (fbData.vehicles || fbData.interventions)){
+      data = fbData;
+      // Initialiser _lastVal avec les données chargées
+      FB._lastVal[bKey('fleet')] = JSON.stringify(fbData);
+      render();
+    } else {
+      // Base vide : initialiser _lastVal avec la structure vide
+      // pour éviter que le polling détecte un faux "changement" après saveD
+      FB._lastVal[bKey('fleet')] = JSON.stringify({vehicles:[],interventions:[]});
+    }
   });
   // Puis polling toutes les 30s pour sync multi-appareils
   if(FB._polls[bKey('fleet')]) clearInterval(FB._polls[bKey('fleet')]);
