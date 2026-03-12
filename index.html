@@ -1610,9 +1610,11 @@ function loadBaseData(skipRender){
   if(FB._polls[bKey('fleet')]) clearInterval(FB._polls[bKey('fleet')]);
   FB._polls[bKey('fleet')] = setInterval(async () => {
     const path = bKey('fleet');
+    // Bloqué si écriture récente
     if(FB._blockUntil[path] && Date.now() < FB._blockUntil[path]) return;
     const fbData = await FB.get(path);
-    if(!fbData) return;
+    // Ne pas écraser si Firebase renvoie null/vide mais qu'on a des données locales
+    if(!fbData || (!fbData.vehicles && !fbData.interventions)) return;
     const newStr = JSON.stringify(fbData);
     if(newStr === FB._lastVal[path]) return; // Pas de changement
     FB._lastVal[path] = newStr;
@@ -1648,10 +1650,13 @@ const fC=v=>v?Math.round(v*getEUR()).toLocaleString('fr-FR')+'\u202fFCFA':'\u201
 const fD=v=>v?`<span style="font-weight:700">${fE(v)}</span>&nbsp;<span style="color:var(--muted);font-size:10px">/ ${fC(v)}</span>`:'—';
 const saveD=async ()=>{
   const path=bKey('fleet');
+  // S'assurer que la structure est complète
+  if(!data.vehicles) data.vehicles=[];
+  if(!data.interventions) data.interventions=[];
   const snapshot=JSON.parse(JSON.stringify(data)); // deep copy
   // Bloquer le polling 20s pour éviter écrasement
   FB.lockWrite(path);
-  // Mettre à jour le cache AVANT l'écriture pour que le polling ne détecte pas de "changement"
+  // Mettre à jour le cache AVANT l'écriture
   FB._lastVal[path] = JSON.stringify(snapshot);
   await FB.set(path, snapshot);
 };
