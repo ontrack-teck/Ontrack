@@ -495,10 +495,10 @@ tbody td{padding:11px 17px;font-size:12px;}
   <span id="syncBadge" title="Synchronisation Firebase" style="font-size:10px;background:rgba(46,201,123,.15);color:#2ec97b;border-radius:20px;padding:3px 9px;margin-left:4px;display:none;">🔴 sync...</span>
   <div class="hctrls">
     <button class="hdrbtn" id="presenceBtn" onclick="togglePresencePanel()" title="Utilisateurs connectés" style="display:none;">🟢 <span id="presenceCount">0</span></button>
-    <label style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);margin-right:-6px;">PLATEFORME</label>
-    <select id="platformSel" class="bsel" onchange="switchPlatform(this.value)" title="Changer de plateforme" style="border-color:#f0a500;color:#f0a500;"></select>
-    <label style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);margin-right:-6px;">BASE</label>
+    <span id="platformBadge" onclick="goToPlatformScreen()" title="Changer de plateforme" style="font-family:'DM Mono',monospace;font-size:11px;font-weight:700;padding:5px 12px;border-radius:20px;border:2px solid #f0a500;color:#f0a500;cursor:pointer;transition:all .2s;display:none;"></span>
     <select id="baseSel" class="bsel" onchange="switchBase(this.value)" title="Changer de base"></select>
+    <!-- Hidden selects kept for JS compatibility -->
+    <select id="platformSel" style="display:none;"></select>
     <select id="yearFilter" class="ysel"></select>
     <select id="langSel" class="lsel" onchange="setLang(this.value)"><option value="fr">🇫🇷 FR</option><option value="en">🇬🇧 EN</option></select>
     <button class="hdrbtn" id="reportBtn" onclick="openReportModal()" title="Télécharger un rapport">📥</button>
@@ -1969,6 +1969,12 @@ const T=()=>LANGS[lang];
 // MULTI-BASE FUNCTIONS
 // ══════════════════════════════════════════════
 // ═══════════════════ PLATFORM SELECTION SCREEN ═══════════════════
+function goToPlatformScreen(){
+  document.getElementById('shell').classList.remove('on');
+  renderPlatformScreen();
+  document.getElementById('scrPlatform').classList.add('on');
+}
+
 function renderPlatformScreen(){
   const plats = getPlatforms();
   const el = document.getElementById('platformCards');
@@ -2080,13 +2086,21 @@ async function ensureAdminInBase(baseId){
 }
 
 function renderPlatformBar(){
-  const sel=document.getElementById('platformSel');if(!sel)return;
   const plats=getPlatforms();
   const p=plats.find(x=>x.id===currentPlatform);
   const color=p?p.color:'#f0a500';
-  sel.innerHTML=plats.map(x=>`<option value="${x.id}" ${x.id===currentPlatform?'selected':''}>${x.name}</option>`).join('');
-  sel.style.borderColor=color;
-  sel.style.color=color;
+  const name=p?p.name:currentPlatform;
+  // Badge indicateur
+  const badge=document.getElementById('platformBadge');
+  if(badge){
+    badge.textContent=name;
+    badge.style.borderColor=color;
+    badge.style.color=color;
+    badge.style.display='';
+  }
+  // Select caché (compatibilité JS)
+  const sel=document.getElementById('platformSel');
+  if(sel) sel.innerHTML=plats.map(x=>`<option value="${x.id}" ${x.id===currentPlatform?'selected':''}>${x.name}</option>`).join('');
 }
 
 async function switchPlatform(id){
