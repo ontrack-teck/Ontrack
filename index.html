@@ -399,6 +399,7 @@ tbody td{padding:11px 17px;font-size:12px;}
 .pg-btn.active{background:var(--accent);color:#000;border-color:var(--accent);}
 .pg-btn:disabled{opacity:.35;cursor:not-allowed;}
 .pg-info{font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);padding:0 6px;}
+@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
 </style>
   <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
@@ -1669,45 +1670,55 @@ function loadBaseData(skipRender){
   data={vehicles:[],interventions:[]};
   _usersCache=null;
   _cfgCache=null;
-  if(!skipRender) render();
-  // Charger la flotte depuis Firebase
+  // 1) Affichage instantané depuis cache sessionStorage
   const fleetPath = bKey('fleet');
+  const cacheKey = 'ot_cache_' + fleetPath;
+  const cached = sessionStorage.getItem(cacheKey);
+  if(cached){
+    try{
+      const c=JSON.parse(cached);
+      data={vehicles:c.vehicles||[],interventions:c.interventions||[]};
+      if(!skipRender) render();
+    }catch(e){}
+  } else {
+    // Afficher skeleton uniquement si pas de cache
+    if(!skipRender){
+      const fc=document.getElementById('fleetC');
+      if(fc) fc.innerHTML=`<div style="display:flex;flex-direction:column;gap:12px;padding:16px;">${[1,2,3].map(()=>`<div style="height:64px;border-radius:12px;background:linear-gradient(90deg,var(--surface2) 25%,var(--surface3,#2a2a2a) 50%,var(--surface2) 75%);background-size:200% 100%;animation:shimmer 1.2s infinite;"></div>`).join('')}</div>`;
+    }
+  }
+  // 2) Charger depuis Firebase (rafraîchit le cache)
   FB.get(fleetPath).then(fbData => {
-    const vehicles = fbData?.vehicles || [];
-    const interventions = fbData?.interventions || [];
+    const vehicles = FB._normalize(fbData?.vehicles || []);
+    const interventions = FB._normalize(fbData?.interventions || []);
     data = {vehicles, interventions};
-    // Initialiser _lastVal avec la structure normalisée
     FB._lastVal[fleetPath] = JSON.stringify({vehicles, interventions});
+    // Mettre à jour le cache sessionStorage
+    sessionStorage.setItem(cacheKey, JSON.stringify({vehicles, interventions}));
     render();
   });
-  // Polling 60s — sync silencieuse UNIQUEMENT si l'utilisateur ne vient pas d'écrire
-  if(FB._polls[bKey('fleet')]) clearInterval(FB._polls[bKey('fleet')]);
-  FB._polls[bKey('fleet')] = setInterval(async () => {
+  // 3) Polling 30s — sync silencieuse
+  FB._polls[fleetPath] = setInterval(async () => {
     const path = bKey('fleet');
-    // Bloqué si écriture récente (20s)
     if(FB._blockUntil[path] && Date.now() < FB._blockUntil[path]) return;
     const fbData = await FB.get(path);
-    // Ignorer si Firebase renvoie vide
     if(!fbData) return;
-    const fbVehicles = fbData.vehicles || [];
-    const fbInterventions = fbData.interventions || [];
-    // Ignorer si Firebase a MOINS de véhicules que ce qu'on a localement
-    // (évite d'écraser des créations récentes)
+    const fbVehicles = FB._normalize(fbData.vehicles || []);
+    const fbInterventions = FB._normalize(fbData.interventions || []);
     if(fbVehicles.length < (data.vehicles||[]).length) return;
     if(fbInterventions.length < (data.interventions||[]).length) return;
-    // Normaliser pour comparaison
     const normalized = {vehicles: fbVehicles, interventions: fbInterventions};
     const newStr = JSON.stringify(normalized);
-    if(newStr === FB._lastVal[path]) return; // Pas de changement
+    if(newStr === FB._lastVal[path]) return;
     FB._lastVal[path] = newStr;
-    // Préserver selVid et curYear
+    sessionStorage.setItem(cacheKey, JSON.stringify(normalized));
     const prevSelVid = selVid;
     const prevYear = curYear;
     data = normalized;
     if(prevSelVid && data.vehicles.find(v=>v.id===prevSelVid)) selVid = prevSelVid;
     curYear = prevYear;
     render();
-  }, 60000);
+  }, 30000);
   FB.off(bKey('users'));
   FB.on(bKey('users'), fbUsers => {
     if(fbUsers){
@@ -1739,8 +1750,9 @@ const saveD=async ()=>{
     interventions: JSON.parse(JSON.stringify(data.interventions))
   };
   FB.lockWrite(path);
-  // Sync _lastVal avec snapshot normalisé
   FB._lastVal[path] = JSON.stringify(snapshot);
+  // Mettre à jour le cache sessionStorage immédiatement
+  sessionStorage.setItem('ot_cache_'+path, JSON.stringify(snapshot));
   await FB.set(path, snapshot);
 };
 const validEmail=e=>/^[^@]+@[^@]+\.[^@]+$/.test(e);
