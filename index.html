@@ -1632,26 +1632,34 @@ function loadBaseData(skipRender){
       FB._lastVal[bKey('fleet')] = JSON.stringify({vehicles:[],interventions:[]});
     }
   });
-  // Puis polling toutes les 30s pour sync multi-appareils
+  // Polling 60s — sync silencieuse UNIQUEMENT si l'utilisateur ne vient pas d'écrire
   if(FB._polls[bKey('fleet')]) clearInterval(FB._polls[bKey('fleet')]);
   FB._polls[bKey('fleet')] = setInterval(async () => {
     const path = bKey('fleet');
-    // Bloqué si écriture récente
+    // Bloqué si écriture récente (20s)
     if(FB._blockUntil[path] && Date.now() < FB._blockUntil[path]) return;
     const fbData = await FB.get(path);
-    // Ne pas écraser si Firebase renvoie null/vide mais qu'on a des données locales
-    if(!fbData || (!fbData.vehicles && !fbData.interventions)) return;
-    const newStr = JSON.stringify(fbData);
+    // Ignorer si Firebase renvoie vide
+    if(!fbData) return;
+    const fbVehicles = fbData.vehicles || [];
+    const fbInterventions = fbData.interventions || [];
+    // Ignorer si Firebase a MOINS de véhicules que ce qu'on a localement
+    // (évite d'écraser des créations récentes)
+    if(fbVehicles.length < (data.vehicles||[]).length) return;
+    if(fbInterventions.length < (data.interventions||[]).length) return;
+    // Normaliser pour comparaison
+    const normalized = {vehicles: fbVehicles, interventions: fbInterventions};
+    const newStr = JSON.stringify(normalized);
     if(newStr === FB._lastVal[path]) return; // Pas de changement
     FB._lastVal[path] = newStr;
     // Préserver selVid et curYear
     const prevSelVid = selVid;
     const prevYear = curYear;
-    data = fbData;
-    if(prevSelVid && data.vehicles?.find(v=>v.id===prevSelVid)) selVid = prevSelVid;
+    data = normalized;
+    if(prevSelVid && data.vehicles.find(v=>v.id===prevSelVid)) selVid = prevSelVid;
     curYear = prevYear;
     render();
-  }, 30000);
+  }, 60000);
   FB.off(bKey('users'));
   FB.on(bKey('users'), fbUsers => {
     if(fbUsers){
@@ -1676,13 +1684,14 @@ const fC=v=>v?Math.round(v*getEUR()).toLocaleString('fr-FR')+'\u202fFCFA':'\u201
 const fD=v=>v?`<span style="font-weight:700">${fE(v)}</span>&nbsp;<span style="color:var(--muted);font-size:10px">/ ${fC(v)}</span>`:'—';
 const saveD=async ()=>{
   const path=bKey('fleet');
-  // S'assurer que la structure est complète
   if(!data.vehicles) data.vehicles=[];
   if(!data.interventions) data.interventions=[];
-  const snapshot=JSON.parse(JSON.stringify(data)); // deep copy
-  // Bloquer le polling 20s pour éviter écrasement
+  const snapshot={
+    vehicles: JSON.parse(JSON.stringify(data.vehicles)),
+    interventions: JSON.parse(JSON.stringify(data.interventions))
+  };
   FB.lockWrite(path);
-  // Mettre à jour le cache AVANT l'écriture
+  // Sync _lastVal avec snapshot normalisé
   FB._lastVal[path] = JSON.stringify(snapshot);
   await FB.set(path, snapshot);
 };
