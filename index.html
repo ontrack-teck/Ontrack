@@ -40,6 +40,9 @@ body{font-family:'Syne',sans-serif;background:var(--bg);color:var(--text);min-he
 .spw .ainp{padding-right:44px;}
 .tpwb{position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;padding:2px;}
 .tpwb:hover{color:var(--text);}
+.role-superuser{background:rgba(74,158,255,.15);color:#4a9eff;}
+.role-tech{background:rgba(46,201,123,.15);color:#2ec97b;}
+.role-user{background:rgba(150,150,150,.15);color:#aaa;}
 .role-pill{display:inline-block;padding:2px 9px;border-radius:10px;font-size:10px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;}
 .role-admin{background:rgba(240,165,0,.2);color:var(--accent);}
 .role-user{background:rgba(74,158,255,.2);color:var(--blue);}
@@ -766,6 +769,7 @@ tbody td{padding:11px 17px;font-size:12px;}
       <div class="aps">
         <div class="apst" id="apSU">Ajouter un utilisateur</div>
         <div class="apf"><label id="apLue">Adresse e-mail du nouvel utilisateur</label><input type="email" id="apUemail" placeholder="utilisateur@exemple.com"></div>
+        <div class="apf"><label>Rôle</label><select id="apUrole" style="background:var(--card);color:var(--fg);border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px;width:100%;"><option value="superuser">⭐ Super User</option><option value="tech">🔧 Technicien</option><option value="user" selected>👁 Consultant</option></select></div>
         <button class="apsave" onclick="addUser()" id="apBU">Créer l'accès</button>
         <div class="apmsg" id="apMU"></div>
       </div>
@@ -1016,7 +1020,35 @@ const setLock=v=>LS.set('sgo_lock',v);
 
 const MAX_FAIL=3, LOCK_MS=5*60*1000;
 let lockTick=null;
-let currentUser=null; // {email, role}
+let currentUser=null;
+
+// ═══════════════════ ROLES ═══════════════════
+// Rôles : admin > superuser > tech > user
+const ROLES = ['admin','superuser','tech','user'];
+const ROLE_LABELS = {
+  admin:     {fr:'👑 Admin',     en:'👑 Admin'},
+  superuser: {fr:'⭐ Super User', en:'⭐ Super User'},
+  tech:      {fr:'🔧 Technicien', en:'🔧 Technician'},
+  user:      {fr:'👁 Consultant', en:'👁 Consultant'}
+};
+const canDo = (action) => {
+  const role = currentUser?.role || 'user';
+  const email = currentUser?.email || '';
+  // L'admin principal a tous les droits
+  if(email === 'ababacard895@gmail.com') return true;
+  switch(action){
+    case 'manageUsers':   return role === 'admin';
+    case 'manageConfig':  return role === 'admin' || role === 'superuser';
+    case 'manageBases':   return role === 'admin' || role === 'superuser';
+    case 'createVehicle': return ['admin','superuser','tech'].includes(role);
+    case 'editVehicle':   return ['admin','superuser','tech'].includes(role);
+    case 'deleteVehicle': return role === 'admin' || role === 'superuser';
+    case 'createIntervention': return ['admin','superuser','tech'].includes(role);
+    case 'editIntervention':   return ['admin','superuser','tech'].includes(role);
+    case 'deleteIntervention': return role === 'admin' || role === 'superuser';
+    default: return false;
+  }
+}; // {email, role}
 let inactivityTimer=null;
 const INACTIVITY_MS=15*60*1000; // 15 minutes
 
@@ -1415,9 +1447,12 @@ function showApp(){
   safe2('hUser',el=>el.textContent=currentUser.email);
   const nb=document.getElementById('notifBtn');
   if(nb) nb.style.display=isAdmin?'':'none';
-  safe2('btnAV',el=>el.style.display='');
+  safe2('btnAV',el=>el.style.display=canDo('createVehicle')?'':'none');
   safe2('admBtn',el=>el.style.display='');
-  safe2('aptUsers',el=>el.style.display=isAdmin?'':'none');
+  safe2('aptUsers',el=>el.style.display=canDo('manageUsers')?'':'none');
+  safe2('aptConfig',el=>el.style.display=canDo('manageConfig')?'':'none');
+  safe2('paneConfig',el=>el.style.display=canDo('manageConfig')?'':'none');
+  safe2('paneUsers',el=>el.style.display=canDo('manageUsers')?'':'none');
   startInactivityWatch();
   renderBaseBar();
   const _bases=getBases();const _cb=_bases.find(b=>b.id===currentBase);const _ls=document.getElementById('baseLogo');if(_ls&&_cb)_ls.textContent=_cb.name;
@@ -1430,7 +1465,13 @@ function openAdm(){
   const isAdmin=currentUser.role==='admin';
   const safe=(id,fn)=>{const el=document.getElementById(id);if(el)fn(el);};
   safe('apEm',el=>el.textContent=(T().apEm||'')+' '+currentUser.email);
-  safe('apBdg',el=>{el.textContent=isAdmin?'ADMIN':'USER';el.style.background=isAdmin?'rgba(240,165,0,.2)':'rgba(74,158,255,.2)';el.style.color=isAdmin?'var(--accent)':'var(--blue)';});
+  safe('apBdg',el=>{
+    const role=currentUser?.role||'user';
+    const labels={admin:'ADMIN',superuser:'SUPER',tech:'TECH',user:'USER'};
+    const bgs={admin:'rgba(240,165,0,.2)',superuser:'rgba(74,158,255,.2)',tech:'rgba(46,201,123,.2)',user:'rgba(150,150,150,.2)'};
+    const cols={admin:'var(--accent)',superuser:'#4a9eff',tech:'#2ec97b',user:'#aaa'};
+    el.textContent=labels[role]||'USER';el.style.background=bgs[role]||bgs.user;el.style.color=cols[role]||cols.user;
+  });
   safe('aptUsers',el=>el.style.display=isAdmin?'':'none');
   safe('aptConfig',el=>el.style.display=isAdmin?'':'none');
   safe('paneConfig',el=>el.style.display=isAdmin?'':'none');
@@ -1457,13 +1498,15 @@ function switchAPTab(tab){
 const admOel=document.getElementById('admO');
 if(admOel) admOel.addEventListener('click',e=>{if(e.target===admOel)closeAdm();});
 
-function addUser(){
+function addUser(){ if(!canDo('manageUsers')){alert('Accès refusé.');return;}
   const em=document.getElementById('apUemail').value.trim();
   const msg=document.getElementById('apMU');msg.className='apmsg';
   if(!validEmail(em)){msg.textContent=T().errEmail;msg.classList.add('err');return;}
   const users=getUsers();
   if(users.find(u=>u.email===em)){msg.textContent=T().errUserExists;msg.classList.add('err');return;}
-  users.push({email:em,h:null,role:'user',status:'pending',tok:null});
+  const roleSelect=document.getElementById('apUrole');
+  const newRole=roleSelect?roleSelect.value:'user';
+  users.push({email:em,h:null,role:newRole,status:'pending',tok:null});
   setUsers(users);
   // Propager l'utilisateur vers toutes les autres bases (accès en attente)
   const allBases=getBases();
@@ -1471,7 +1514,7 @@ function addUser(){
     if(b.id===currentBase) return;
     const bUsers=await FB.get(b.id+'__users')||[];
     if(!bUsers.find(u=>u.email===em)){
-      bUsers.push({email:em,h:null,role:'user',status:'pending',tok:null});
+      bUsers.push({email:em,h:null,role:newRole,status:'pending',tok:null});
       await FB.set(b.id+'__users',bUsers);
     }
   });
@@ -1527,33 +1570,35 @@ function renderUserList(){
       <div class="uitem-info">
         <div class="uitem-email" style="${u.status==='blocked'?'color:var(--muted);text-decoration:line-through':''}">${u.email}</div>
         <div class="uitem-meta">
-          <span class="${u.role==='admin'?'role-pill role-admin':'role-pill role-user'}">${u.role==='admin'?'Admin':'User'}</span>
+          <span class="role-pill role-${u.role||'user'}">${(ROLE_LABELS[u.role]||ROLE_LABELS.user)[lang]||u.role}</span>
           <span class="${u.status==='pending'?'pending-badge':u.status==='blocked'?'blocked-badge':'active-badge'}">${u.status==='pending'?L.statusPending:u.status==='blocked'?L.statusBlocked:L.statusActive}</span>
           ${u.status==='pending'?`<span style="font-size:11px;color:var(--muted)">${L.pendingHint}</span>`:''}
           ${u.status==='blocked'?`<span style="font-size:11px;color:var(--red)">${L.blockedHint}</span>`:''}
         </div>
       </div>
       <div style="display:flex;gap:6px;align-items:center;">
-        <button class="uitem-block" onclick="toggleAdmin('${u.email}')" title="${u.role==='admin'?'Rétrograder en utilisateur':'Promouvoir en administrateur'}" style="background:${u.role==='admin'?'rgba(240,165,0,.15)':'rgba(46,201,123,.1)'};color:${u.role==='admin'?'var(--accent)':'#2ec97b'};border:1px solid ${u.role==='admin'?'var(--accent)':'#2ec97b'};border-radius:6px;padding:4px 8px;font-size:11px;font-weight:700;cursor:pointer;">${u.role==='admin'?'👑 Admin':'⬆ Admin'}</button>
+        <select onchange="changeRole('${u.email}',this.value)" style="background:var(--card);color:var(--fg);border:1px solid var(--border);border-radius:6px;padding:4px 6px;font-size:11px;font-weight:700;cursor:pointer;">
+          ${ROLES.map(r=>`<option value="${r}" ${u.role===r?'selected':''}>${(ROLE_LABELS[r]||{fr:r})[lang]||r}</option>`).join('')}
+        </select>
         ${u.status!=='pending'?`<button class="uitem-block" onclick="toggleBlock('${u.email}')" title="${u.status==='blocked'?L.unblockUser:L.blockUser}">${u.status==='blocked'?'🔓':'🔒'}</button>`:''}
         <button class="uitem-del" onclick="removeUser('${u.email}')" title="${L.delUser}">🗑</button>
       </div>
     </div>`).join('');
 }
 
-function toggleAdmin(email){
+function changeRole(email, newRole){
+  if(!canDo('manageUsers')){alert('Accès refusé.');return;}
+  if(!ROLES.includes(newRole)) return;
   const users=getUsers();
   const u=users.find(x=>x.email===email);
   if(!u) return;
-  const newRole=u.role==='admin'?'user':'admin';
-  const action=newRole==='admin'?'promouvoir en Administrateur':'rétrograder en Utilisateur';
-  if(!confirm(`Voulez-vous ${action} :\n${email} ?`)) return;
   u.role=newRole;
-  if(newRole==='admin' && u.status==='pending') u.status='active';
+  if(newRole!=='user' && u.status==='pending') u.status='active';
   setUsers(users);
   renderUserList();
   const msg=document.getElementById('apMU');
-  if(msg){msg.textContent=`✓ ${email} est maintenant ${newRole==='admin'?'Administrateur':'Utilisateur'}`;msg.className='apmsg ok';setTimeout(()=>{msg.textContent='';msg.className='apmsg';},3000);}
+  const label=(ROLE_LABELS[newRole]||{fr:newRole})[lang]||newRole;
+  if(msg){msg.textContent=`✓ ${email} → ${label}`;msg.className='apmsg ok';setTimeout(()=>{msg.textContent='';msg.className='apmsg';},3000);}
 }
 
 function chgEmail(){
@@ -2859,7 +2904,7 @@ function renderInterventionsPage(ii, isAdmin, L){
       <td style="font-size:11px;line-height:1.6">${fD(i.cost)}</td>
       <td>${hasA?`<div class="attach-chips">${chips}</div>`:'—'}</td>
       <td style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted)">${i.addedBy||'—'}</td>
-      ${isAdmin?`<td style="display:flex;gap:4px;"><button class="dbtn ebtn" onclick="openEditI('${i.id}')" title="Modifier">✏️</button><button class="dbtn" onclick="delI('${i.id}')" title="Supprimer">✕</button></td>`:''}
+      <td style="display:flex;gap:4px;">${canDo('editIntervention')?`<button class="dbtn ebtn" onclick="openEditI('${i.id}')" title="Modifier">✏️</button>`:''} ${canDo('deleteIntervention')?`<button class="dbtn" onclick="delI('${i.id}')" title="Supprimer">✕</button>`:''}</td>
     </tr>`;
   }).join('');
 
@@ -2921,7 +2966,7 @@ function renderDet(id){
       </div>
       <div style="display:flex;gap:8px;align-items:center;">
         <button class="btn-e" style="background:var(--surface2);color:var(--accent);border:1px solid var(--accent);" onclick="openQR('${id}')">🔲 QR</button>
-        ${(!isUninstalled(id)||isAdmin)?`<button class="btn-e" onclick="openEditV('${id}')">${L.btnEdit}</button>`:''}
+        ${canDo('editVehicle')?`<button class="btn-e" onclick="openEditV('${id}')">${L.btnEdit}</button>`:''}
         ${isAdmin?`<button class="btn-r" onclick="delV('${id}')">${L.btnDel}</button>`:''}
       </div>
     </div>
@@ -3172,7 +3217,7 @@ function openEditV(id){
   for(let i=0;i<sel.options.length;i++){if(sel.options[i].value===v.type||sel.options[i].text===v.type){sel.selectedIndex=i;break;}}
   document.getElementById('moEV').classList.add('open');
 }
-function saveEV(){
+function saveEV(){ if(!canDo('editVehicle')){alert('Accès refusé.');return;}
   const n=document.getElementById('evName').value.trim();
   const p=document.getElementById('evPlate').value.trim();
   const t=document.getElementById('evType').value;
@@ -3205,7 +3250,7 @@ function openAddI(){
 }
 function closeMo(id){document.getElementById(id).classList.remove('open');}
 
-async function saveV(){
+async function saveV(){ if(!canDo('createVehicle')){alert('Accès refusé.');return;}
   const n=document.getElementById('vName').value.trim();
   const p=document.getElementById('vPlate').value.trim();
   const vs=document.getElementById('vType');
@@ -3219,6 +3264,7 @@ async function saveV(){
   await saveD(); // Puis sauvegarder en arrière-plan
 }
 function saveI(){
+  if(!canDo('createIntervention')){alert('Accès refusé.');return;}
   const d=document.getElementById('iDate').value,tp=document.getElementById('iType').value,de=document.getElementById('iDesc').value.trim(),co=parseFloat(document.getElementById('iCost').value)||0;
   if(!d){alert(T().alertD);return;}
   if(!selVid){alert('Sélectionnez d\'abord un véhicule.');return;}
@@ -3239,7 +3285,7 @@ function saveI(){
   saveD().catch(()=>alert('Erreur de sauvegarde.'));
 }
 function delV(id){
-  if(currentUser?.role!=='admin')return;
+  if(!canDo('deleteVehicle'))return;
   if(!confirm(T().confDel))return;
   data.vehicles=data.vehicles.filter(v=>v.id!==id);data.interventions=data.interventions.filter(i=>i.vehicleId!==id);
   saveD();selVid=null;document.getElementById('fleetC').innerHTML=`<div class="es"><div class="es-ic">🚛</div><h3>${T().esT}</h3><p>${T().esD}</p></div>`;render();
@@ -3306,7 +3352,7 @@ function removeEditAttach(i){
 }
 
 function openEditI(id){
-  if(currentUser?.role!=='admin') return;
+  if(!canDo('editIntervention')) return;
   const i=data.interventions.find(x=>x.id===id);
   if(!i) return;
   editIId=id;
@@ -3342,7 +3388,7 @@ function openEditI(id){
 }
 
 function saveEI(){
-  if(currentUser?.role!=='admin') return;
+  if(!canDo('editIntervention')){alert('Accès refusé.');return;}
   const i=data.interventions.find(x=>x.id===editIId);
   if(!i) return;
   const d=document.getElementById('eiDate').value;
@@ -3371,7 +3417,7 @@ function saveEI(){
 // ═══════════════════════════════════════════════════════
 
 function delI(id){
-  if(currentUser?.role!=='admin')return;
+  if(!canDo('deleteIntervention'))return;
   data.interventions=data.interventions.filter(i=>i.id!==id);saveD();render();
 }
 
