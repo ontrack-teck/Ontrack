@@ -907,14 +907,15 @@ const FB = {
       await fetch(`${FB_URL}/${path}.json`, {method:'DELETE'});
     } catch(e) {}
   },
-  // Polling toutes les 10s — verrou pour éviter conflit lecture/écriture
+  // Polling toutes les 30s avec blocage post-écriture
   _polls: {},
-  _writing: {},  // verrou par path
-  _lastVal: {},  // dernière valeur connue par path
+  _blockUntil: {},  // timestamp jusqu'auquel bloquer le polling par path
+  _lastVal: {},     // dernière valeur connue par path
   on: (path, cb) => {
     if(FB._polls[path]) clearInterval(FB._polls[path]);
     const poll = async () => {
-      if(FB._writing[path]) return; // Ne pas lire pendant une écriture
+      // Bloqué si écriture récente
+      if(FB._blockUntil[path] && Date.now() < FB._blockUntil[path]) return;
       const val = await FB.get(path);
       const newStr = JSON.stringify(val);
       if(newStr === FB._lastVal[path]) return; // Pas de changement → pas de re-render
@@ -922,18 +923,20 @@ const FB = {
       cb(val);
     };
     poll(); // appel immédiat
-    FB._polls[path] = setInterval(poll, 10000); // 10s au lieu de 3s
+    FB._polls[path] = setInterval(poll, 30000); // 30s
   },
   off: (path) => {
     if(FB._polls[path]){ clearInterval(FB._polls[path]); delete FB._polls[path]; }
     delete FB._lastVal[path];
-    delete FB._writing[path];
+    delete FB._blockUntil[path];
   },
-  lockWrite: (path) => { FB._writing[path] = true; },
-  unlockWrite: (path) => { 
-    delete FB._writing[path];
-    // Invalider le cache pour forcer une relecture après écriture
-    delete FB._lastVal[path];
+  lockWrite: (path) => {
+    // Bloquer le polling pendant 20s après une écriture
+    FB._blockUntil[path] = Date.now() + 20000;
+  },
+  unlockWrite: (path) => {
+    // Mettre à jour le cache avec les données actuelles pour éviter re-render parasite
+    // Le blocage reste actif encore quelques secondes (défini dans lockWrite)
   }
 };
 
@@ -1638,14 +1641,12 @@ const fC=v=>v?Math.round(v*getEUR()).toLocaleString('fr-FR')+'\u202fFCFA':'\u201
 const fD=v=>v?`<span style="font-weight:700">${fE(v)}</span>&nbsp;<span style="color:var(--muted);font-size:10px">/ ${fC(v)}</span>`:'—';
 const saveD=async ()=>{
   const path=bKey('fleet');
+  const snapshot=JSON.parse(JSON.stringify(data)); // deep copy
+  // Bloquer le polling 20s pour éviter écrasement
   FB.lockWrite(path);
-  try{
-    await FB.set(path, JSON.parse(JSON.stringify(data))); // deep copy pour éviter mutation
-  } finally {
-    FB.unlockWrite(path);
-    // Mettre à jour le cache lastVal pour éviter re-render parasite du polling
-    FB._lastVal[path] = JSON.stringify(data);
-  }
+  // Mettre à jour le cache AVANT l'écriture pour que le polling ne détecte pas de "changement"
+  FB._lastVal[path] = JSON.stringify(snapshot);
+  await FB.set(path, snapshot);
 };
 const validEmail=e=>/^[^@]+@[^@]+\.[^@]+$/.test(e);
 
