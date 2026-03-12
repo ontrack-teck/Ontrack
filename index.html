@@ -412,6 +412,17 @@ tbody td{padding:11px 17px;font-size:12px;}
 </head>
 <body>
 
+<!-- PLATFORM SELECTION -->
+<div class="asc on" id="scrPlatform">
+  <div class="abox" style="text-align:center;max-width:480px;">
+    <div style="margin-bottom:32px;">
+      <div style="background:var(--accent);color:#000;font-size:26px;font-weight:900;padding:6px 16px;border-radius:8px;display:inline-block;letter-spacing:1px;">ONTRACK</div>
+      <div style="font-size:13px;color:var(--muted);margin-top:8px;font-weight:600;letter-spacing:2px;text-transform:uppercase;">Sélectionnez votre plateforme</div>
+    </div>
+    <div id="platformCards" style="display:flex;flex-direction:column;gap:14px;"></div>
+  </div>
+</div>
+
 <!-- ACCOUNT PICKER -->
 <div class="apick" id="scrPick">
   <div class="apick-box">
@@ -1254,41 +1265,16 @@ function showLogin(){
 // ═══════════════════════════════════════════════════════
 
 function boot(){
-  // Restore platform and base from session
-  const _sess=getSession();
-  if(_sess?.platform){ currentPlatform=_sess.platform; }
-  if(_sess?.base){ currentBase=_sess.base; }
-  initConfig();
-  loadBaseData();
+  // Charger les plateformes puis afficher l'écran de sélection
+  FB.get('platforms').then(fbPlats=>{
+    if(fbPlats && fbPlats.length) _platformsCache=fbPlats;
+    else { _platformsCache=DEFAULT_PLATFORMS; FB.set('platforms',DEFAULT_PLATFORMS); }
+    renderPlatformScreen();
+  }).catch(()=>{ renderPlatformScreen(); });
 
   // Vérifier connexion Firebase
   checkFBConnection();
   setInterval(checkFBConnection, 10000);
-
-  // Session active → connexion automatique
-  if(_sess){
-    const u=getUsers().find(u=>u.email===_sess.email&&userHasToken(u,_sess.tok));
-    if(u&&u.status==='active'){currentUser={email:u.email,role:u.role};showApp();return;}
-  }
-
-  // Comptes enregistrés sur cet appareil → picker
-  const stored=getSessions();
-  if(stored.length>0){
-    renderAccountPicker();
-    document.getElementById('scrPick').classList.add('on');
-    return;
-  }
-
-  // Aucun utilisateur → setup
-  const users=getUsers();
-  if(!users.length){
-    document.getElementById('scrSetup').classList.add('on');
-    return;
-  }
-
-  // Login classique
-  document.getElementById('scrLogin').classList.add('on');
-  startLockUI();
 }
 
 // ═══════════════════ SETUP (first admin) ═══════════════════
@@ -1411,19 +1397,13 @@ function doLogout(){
   setSession(null);
   currentUser=null;
   document.getElementById('shell').classList.remove('on');
-  const stored=getSessions();
-  if(stored.length>0){
-    renderAccountPicker();
-    document.getElementById('scrPick').classList.add('on');
-  } else {
-    document.getElementById('scrLogin').classList.add('on');
-    startLockUI();
-  }
+  // Retourner à l'écran de sélection de plateforme
+  renderPlatformScreen();
+  document.getElementById('scrPlatform').classList.add('on');
 }
 
 function switchAccount(){
   stopInactivityWatch();
-  // Changer de compte : garde la session dans le picker pour revenir facilement
   setSession(null);
   currentUser=null;
   document.getElementById('shell').classList.remove('on');
@@ -1988,7 +1968,67 @@ const T=()=>LANGS[lang];
 // ══════════════════════════════════════════════
 // MULTI-BASE FUNCTIONS
 // ══════════════════════════════════════════════
-// ═══════════════════ PLATFORMS ═══════════════════
+// ═══════════════════ PLATFORM SELECTION SCREEN ═══════════════════
+function renderPlatformScreen(){
+  const plats = getPlatforms();
+  const el = document.getElementById('platformCards');
+  if(!el) return;
+  el.innerHTML = plats.map(p => `
+    <button onclick="selectPlatform('${p.id}')" style="
+      display:flex;align-items:center;gap:18px;
+      background:var(--surface2);border:2px solid ${p.color}22;
+      border-radius:14px;padding:20px 24px;cursor:pointer;
+      transition:all .2s;text-align:left;width:100%;
+      font-family:'Syne',sans-serif;
+      " onmouseover="this.style.borderColor='${p.color}';this.style.background='${p.color}11'"
+        onmouseout="this.style.borderColor='${p.color}22';this.style.background='var(--surface2)'">
+      <div style="width:44px;height:44px;border-radius:10px;background:${p.color}22;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;">
+        ${p.id==='ZA'?'🚗':'🏢'}
+      </div>
+      <div>
+        <div style="font-size:16px;font-weight:800;color:${p.color};">${p.name}</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:3px;">
+          ${p.id==='ZA'?'Gestion de flotte véhicules':'Gestion entreprise'}
+        </div>
+      </div>
+      <div style="margin-left:auto;color:${p.color};font-size:20px;">›</div>
+    </button>
+  `).join('');
+}
+
+function selectPlatform(id){
+  currentPlatform = id;
+  const sess = getSession();
+  if(sess){ sess.platform=id; setSession(sess); }
+  // Masquer écran plateforme
+  document.getElementById('scrPlatform').classList.remove('on');
+  // Charger les bases de la plateforme choisie
+  _basesCache = null;
+  initConfig();
+  loadBaseData();
+  // Continuer le flow normal de boot
+  bootAfterPlatform();
+}
+
+function bootAfterPlatform(){
+  const _sess = getSession();
+  // Session active → connexion automatique
+  if(_sess && _sess.platform === currentPlatform){
+    const u = getUsers().find(u=>u.email===_sess.email && userHasToken(u,_sess.tok));
+    if(u && u.status==='active'){ currentUser={email:u.email,role:u.role}; showApp(); return; }
+  }
+  // Comptes enregistrés → picker
+  const stored = getSessions();
+  if(stored.length>0){ renderAccountPicker(); document.getElementById('scrPick').classList.add('on'); return; }
+  // Aucun user → setup
+  const users = getUsers();
+  if(!users.length){ document.getElementById('scrSetup').classList.add('on'); return; }
+  // Login classique
+  document.getElementById('scrLogin').classList.add('on');
+  startLockUI();
+}
+
+
 async function loadPlatformBases(){
   const fbBases = await FB.get(currentPlatform+'__bases').catch(()=>null);
   if(fbBases && fbBases.length){
