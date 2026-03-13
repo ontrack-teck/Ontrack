@@ -1171,7 +1171,15 @@ function stopInactivityWatch(){
   });
 }
 
-function hash(s){let h=0;for(let i=0;i<s.length;i++)h=Math.imul(31,h)+s.charCodeAt(i)|0;return h.toString(16);}
+// Hash SHA-256 natif (async) — beaucoup plus sécurisé que l'ancien hash maison
+async function hashSHA256(s){
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+// Ancien hash conservé uniquement pour la migration des comptes existants
+function hashLegacy(s){let h=0;for(let i=0;i<s.length;i++)h=Math.imul(31,h)+s.charCodeAt(i)|0;return h.toString(16);}
+// Fonction principale — retourne SHA-256 (async)
+async function hash(s){ return await hashSHA256(s); }
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2);
 
 // Identifiant unique et persistant pour cet appareil/navigateur
@@ -1303,7 +1311,7 @@ function boot(){
 }
 
 // ═══════════════════ SETUP (first admin) ═══════════════════
-function doSetup(){
+async function doSetup(){
   const em=document.getElementById('su_email').value.trim();
   const pw=document.getElementById('su_pw').value;
   const pw2=document.getElementById('su_pw2').value;
@@ -1312,7 +1320,7 @@ function doSetup(){
   if(pw.length<6){err.textContent=T().errShort;err.classList.add('on');return;}
   if(pw!==pw2){err.textContent=T().errMatch;err.classList.add('on');return;}
   const tok=uid();
-  const adminUser={email:em,h:hash(pw),role:'admin',status:'active',tok};
+  const adminUser={email:em,h:await hash(pw),role:'admin',status:'active',tok};
   setUserToken(adminUser, DEVICE_ID, tok);
   setUsers([adminUser]);
   setSession({email:em,tok,base:currentBase,platform:currentPlatform});
@@ -1323,7 +1331,7 @@ function doSetup(){
 }
 
 // ═══════════════════ FIRST LOGIN (pending user sets password) ═══════════════════
-function doFirstLogin(){
+async function doFirstLogin(){
   const em=document.getElementById('fi_email').value.trim();
   const pw=document.getElementById('fi_pw').value;
   const pw2=document.getElementById('fi_pw2').value;
@@ -1334,11 +1342,10 @@ function doFirstLogin(){
   if(pw.length<6){err.textContent=T().errShort;err.classList.add('on');return;}
   if(pw!==pw2){err.textContent=T().errMatch;err.classList.add('on');return;}
   const tok=uid();
-  const pwHash=hash(pw);
+  const pwHash=await hash(pw);
   u.h=pwHash;u.status='active';
   setUserToken(u, DEVICE_ID, tok);
   setUsers(users);
-  // Propager uniquement le hash (pas le token) vers les autres bases en attente
   const allBases=getBases();
   allBases.forEach(async b=>{
     if(b.id===currentBase) return;
@@ -1347,7 +1354,6 @@ function doFirstLogin(){
     if(bu && bu.status==='pending'){
       bu.h=pwHash;
       bu.status='active';
-      // Ne pas toucher au tok des autres bases
       await FB.set(b.id+'__users',bUsers);
     }
   });
@@ -1359,7 +1365,7 @@ function doFirstLogin(){
 }
 
 // ═══════════════════ LOGIN ═══════════════════
-function doLogin(){
+async function doLogin(){
   const lo=getLock();if(lo.until>Date.now())return;
   const em=document.getElementById('li_email').value.trim();
   const pw=document.getElementById('li_pw').value;
@@ -1375,7 +1381,18 @@ function doLogin(){
   }
   const blocked=users.find(u=>u.email===em&&u.status==='blocked');
   if(blocked){err.textContent=T().errBlocked;err.classList.add('on');return;}
-  const u=users.find(u=>u.email===em&&u.status==='active'&&u.h===hash(pw));
+
+  const newHash = await hash(pw);
+  const legacyHash = hashLegacy(pw);
+
+  // Chercher d'abord avec SHA-256, puis avec l'ancien hash (migration)
+  let u = users.find(u=>u.email===em&&u.status==='active'&&u.h===newHash);
+  let needsMigration = false;
+  if(!u){
+    u = users.find(u=>u.email===em&&u.status==='active'&&u.h===legacyHash);
+    if(u) needsMigration = true;
+  }
+
   if(!u){
     const na=lo.n+1;
     if(na>=MAX_FAIL){setLock({n:na,until:Date.now()+LOCK_MS});startLockUI();err.textContent=T().errLocked;}
@@ -1383,6 +1400,25 @@ function doLogin(){
     err.classList.add('on');return;
   }
   setLock({n:0,until:0});
+
+  // Migration automatique : remplacer l'ancien hash par SHA-256
+  if(needsMigration){
+    u.h = newHash;
+    const allUsers = getUsers();
+    const idx = allUsers.findIndex(x=>x.email===em);
+    if(idx>=0) allUsers[idx].h = newHash;
+    setUsers(allUsers);
+    await FB.set(currentBase+'__users', allUsers);
+    // Migrer aussi les autres bases
+    const allBases2=getBases();
+    allBases2.forEach(async b=>{
+      if(b.id===currentBase) return;
+      const bUsers=await FB.get(b.id+'__users')||[];
+      const bu=bUsers.find(x=>x.email===em);
+      if(bu&&bu.h===legacyHash){ bu.h=newHash; await FB.set(b.id+'__users',bUsers); }
+    });
+  }
+
   // Sync le hash vers toutes les bases où l'user est encore en attente
   const allBases2=getBases();
   allBases2.forEach(async b=>{
@@ -1396,12 +1432,10 @@ function doLogin(){
     }
   });
   const tok=uid();
-  // Mettre à jour le token uniquement dans la base courante
   const allUsers=getUsers();
   const loginUser=allUsers.find(x=>x.email===em);
   setUserToken(loginUser, DEVICE_ID, tok);
   setUsers(allUsers);
-  // NE PAS propager le tok vers les autres bases — chaque base gère ses propres tokens
   setSession({email:em,tok,base:currentBase,platform:currentPlatform});
   currentUser={email:em,role:u.role};
   addSession({email:em,tok,base:currentBase});
@@ -1718,12 +1752,13 @@ function changeRole(email, newRole){
   if(msg){msg.textContent=`✓ ${email} → ${label}`;msg.className='apmsg ok';setTimeout(()=>{msg.textContent='';msg.className='apmsg';},3000);}
 }
 
-function chgEmail(){
+async function chgEmail(){
   const users=getUsers(),u=users.find(x=>x.email===currentUser.email);
   const ne=document.getElementById('apNe').value.trim(),cpw=document.getElementById('apCpe').value;
   const msg=document.getElementById('apMe');msg.className='apmsg';
   if(!validEmail(ne)){msg.textContent=T().errEmail;msg.classList.add('err');return;}
-  if(hash(cpw)!==u.h){msg.textContent=T().errWrongPw;msg.classList.add('err');return;}
+  const cpwHash=await hash(cpw);
+  if(cpwHash!==u.h && hashLegacy(cpw)!==u.h){msg.textContent=T().errWrongPw;msg.classList.add('err');return;}
   if(users.find(x=>x.email===ne)){msg.textContent=T().errUserExists;msg.classList.add('err');return;}
   u.email=ne;setUsers(users);currentUser.email=ne;
   document.getElementById('apEm').textContent=(T().apEm||'')+' '+ne;
@@ -1733,17 +1768,17 @@ function chgEmail(){
   msg.textContent=T().okEmail;msg.classList.add('ok');
 }
 
-function chgPw(){
+async function chgPw(){
   const users=getUsers(),u=users.find(x=>x.email===currentUser.email);
   const op=document.getElementById('apOp').value,np=document.getElementById('apNp').value,cp=document.getElementById('apCp').value;
   const msg=document.getElementById('apMp');msg.className='apmsg';
-  if(hash(op)!==u.h){msg.textContent=T().errWrongPw;msg.classList.add('err');return;}
+  const opHash=await hash(op);
+  if(opHash!==u.h && hashLegacy(op)!==u.h){msg.textContent=T().errWrongPw;msg.classList.add('err');return;}
   if(np.length<6){msg.textContent=T().errShort;msg.classList.add('err');return;}
   if(np!==cp){msg.textContent=T().errMatch;msg.classList.add('err');return;}
-  const newHash=hash(np);
+  const newHash=await hash(np);
   u.h=newHash;
   setUsers(users);
-  // Propager le nouveau hash vers TOUTES les bases
   const allBases=getBases();
   allBases.forEach(async b=>{
     if(b.id===currentBase) return;
