@@ -849,6 +849,22 @@ tbody td{padding:11px 17px;font-size:12px;}
         <div class="apmsg" id="cfgMVT"></div>
       </div>
 
+      <!-- Sauvegarde Firebase -->
+      <div class="aps" id="backupSection">
+        <div class="apst">💾 Sauvegarde des données</div>
+        <div style="background:var(--bg);border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:11px;color:var(--muted);line-height:1.7;">
+          Sauvegarde automatique <b style="color:var(--accent)">chaque semaine</b> — toutes les bases de la plateforme courante sont exportées en JSON.<br>
+          Dernière sauvegarde : <span id="lastBackupDate" style="color:var(--text);font-family:'DM Mono',monospace;">jamais</span>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+          <button class="apsave" onclick="runBackup(true)" id="backupBtn">📥 Sauvegarder maintenant</button>
+          <span id="backupMsg" style="font-size:12px;color:#2ec97b;"></span>
+        </div>
+        <div style="margin-top:10px;font-size:11px;color:var(--muted);">
+          ⏱ Prochaine sauvegarde auto : <span id="nextBackupDate" style="color:var(--text);font-family:'DM Mono',monospace;">—</span>
+        </div>
+      </div>
+
       <!-- Types d'interventions -->
       <div class="aps">
         <div class="apst" id="cfgSITypes">Types d'interventions</div>
@@ -1459,6 +1475,7 @@ function showApp(){
   safe2('paneUsers',el=>el.style.display=canDo('manageUsers')?'':'none');
   startInactivityWatch();
   startPresence();
+  if(currentUser.role === 'admin'){ startBackupScheduler(); updateBackupUI(); }
   renderPlatformBar();
   renderBaseBar();
   const _bases=getBases();const _cb=_bases.find(b=>b.id===currentBase);const _ls=document.getElementById('baseLogo');if(_ls&&_cb)_ls.textContent=_cb.name;
@@ -1579,6 +1596,7 @@ function openAdm(){
   safe('apPwH',el=>el.textContent='');
   switchAPTab('account');
   if(isAdmin) renderUserList();
+  if(isAdmin) updateBackupUI();
   safe('admO',el=>el.classList.add('open'));
 }
 function closeAdm(){document.getElementById('admO').classList.remove('open');}
@@ -1991,6 +2009,92 @@ document.addEventListener('click', e=>{
     menu.style.display='none';
   }
 });
+
+// ═══════════════════ SAUVEGARDE AUTOMATIQUE ═══════════════════
+const BACKUP_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000; // 7 jours
+const BACKUP_KEY = 'ot_last_backup';
+let _backupTimer = null;
+
+function getLastBackup(){ return LS.get(BACKUP_KEY) || null; }
+function setLastBackup(ts){ LS.set(BACKUP_KEY, ts); }
+
+function formatBackupDate(ts){
+  if(!ts) return 'jamais';
+  return new Date(ts).toLocaleString('fr-FR', {day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+}
+
+function updateBackupUI(){
+  const last = getLastBackup();
+  const el = document.getElementById('lastBackupDate');
+  const next = document.getElementById('nextBackupDate');
+  if(el) el.textContent = formatBackupDate(last);
+  if(next && last){
+    const nextTs = last + BACKUP_INTERVAL_MS;
+    next.textContent = formatBackupDate(nextTs);
+  } else if(next){
+    next.textContent = 'dès maintenant';
+  }
+}
+
+async function runBackup(manual=false){
+  if(!currentUser || currentUser.role !== 'admin') return;
+  const btn = document.getElementById('backupBtn');
+  const msg = document.getElementById('backupMsg');
+  if(btn) btn.disabled = true;
+  if(msg) msg.textContent = '⏳ En cours...';
+
+  try {
+    const bases = getBases();
+    const backupData = {
+      platform: currentPlatform,
+      date: new Date().toISOString(),
+      bases: {}
+    };
+
+    for(const base of bases){
+      const fleet = await FB.get(base.id + '__fleet');
+      backupData.bases[base.id] = fleet || {vehicles:[], interventions:[]};
+    }
+
+    // Télécharger le JSON
+    const filename = 'ontrack_backup_' + currentPlatform + '_' + new Date().toISOString().slice(0,10) + '.json';
+    const blob = new Blob([JSON.stringify(backupData, null, 2)], {type:'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+
+    const now = Date.now();
+    setLastBackup(now);
+    updateBackupUI();
+
+    if(msg){ msg.textContent = manual ? '✅ Sauvegarde téléchargée !' : ''; setTimeout(()=>{ if(msg) msg.textContent=''; }, 4000); }
+  } catch(e){
+    if(msg){ msg.style.color='#e05a2b'; msg.textContent = '✗ Erreur: ' + e.message; }
+  }
+  if(btn) btn.disabled = false;
+}
+
+function checkAutoBackup(){
+  if(!currentUser || currentUser.role !== 'admin') return;
+  const last = getLastBackup();
+  const now = Date.now();
+  if(!last || (now - last) >= BACKUP_INTERVAL_MS){
+    // Délai de 5s après connexion pour ne pas bloquer le chargement
+    setTimeout(() => runBackup(false), 5000);
+  }
+}
+
+function startBackupScheduler(){
+  if(_backupTimer) clearInterval(_backupTimer);
+  checkAutoBackup();
+  // Vérifier toutes les heures si la sauvegarde est due
+  _backupTimer = setInterval(() => {
+    if(currentUser && currentUser.role === 'admin') checkAutoBackup();
+  }, 60 * 60 * 1000);
+}
 
 // ═══════════════════ PLATFORM SELECTION SCREEN ═══════════════════
 function goToPlatformScreen(){
