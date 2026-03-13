@@ -858,6 +858,8 @@ tbody td{padding:11px 17px;font-size:12px;}
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
           <button class="apsave" onclick="runBackup(true)" id="backupBtn">📥 Sauvegarder maintenant</button>
+          <button class="apsave" onclick="document.getElementById('restoreInput').click()" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);">🔄 Restaurer une sauvegarde</button>
+          <input type="file" id="restoreInput" accept=".json" style="display:none;" onchange="restoreBackup(this)">
           <span id="backupMsg" style="font-size:12px;color:#2ec97b;"></span>
         </div>
         <div style="margin-top:10px;font-size:11px;color:var(--muted);">
@@ -2085,6 +2087,74 @@ function checkAutoBackup(){
     // Délai de 5s après connexion pour ne pas bloquer le chargement
     setTimeout(() => runBackup(false), 5000);
   }
+}
+
+async function restoreBackup(input){
+  if(!currentUser || currentUser.role !== 'admin') return;
+  const file = input.files[0];
+  if(!file) return;
+  input.value = ''; // reset pour permettre re-sélection du même fichier
+
+  const msg = document.getElementById('backupMsg');
+  const btn = document.getElementById('backupBtn');
+
+  // Lire le fichier
+  let backupData;
+  try {
+    const text = await file.text();
+    backupData = JSON.parse(text);
+  } catch(e) {
+    if(msg){ msg.style.color='#e05a2b'; msg.textContent = '✗ Fichier invalide'; }
+    return;
+  }
+
+  // Vérifier structure
+  if(!backupData.bases || typeof backupData.bases !== 'object'){
+    if(msg){ msg.style.color='#e05a2b'; msg.textContent = '✗ Format de sauvegarde non reconnu'; }
+    return;
+  }
+
+  const bases = Object.keys(backupData.bases);
+  const dateStr = backupData.date ? new Date(backupData.date).toLocaleString('fr-FR') : 'inconnue';
+  const platform = backupData.platform || '?';
+
+  // Confirmation
+  const confirm1 = confirm(
+    '⚠️ RESTAURATION DE SAUVEGARDE\n\n' +
+    'Fichier : ' + file.name + '\n' +
+    'Date : ' + dateStr + '\n' +
+    'Plateforme : ' + platform + '\n' +
+    'Bases : ' + bases.join(', ') + '\n\n' +
+    'Cette opération va REMPLACER les données actuelles de ces bases.\n' +
+    'Les interventions et véhicules existants seront écrasés.\n\n' +
+    'Continuer ?'
+  );
+  if(!confirm1) return;
+
+  const confirm2 = confirm('Dernière confirmation : êtes-vous sûr de vouloir restaurer ces données ?');
+  if(!confirm2) return;
+
+  if(btn) btn.disabled = true;
+  if(msg){ msg.style.color='#4a9eff'; msg.textContent = '⏳ Restauration en cours...'; }
+
+  let ok = 0, errors = [];
+  for(const [baseId, fleetData] of Object.entries(backupData.bases)){
+    try {
+      await FB.set(baseId + '__fleet', fleetData);
+      ok++;
+    } catch(e) {
+      errors.push(baseId + ': ' + e.message);
+    }
+  }
+
+  if(errors.length === 0){
+    if(msg){ msg.style.color='#2ec97b'; msg.textContent = '✅ ' + ok + ' base(s) restaurée(s) avec succès !'; }
+    // Recharger les données locales
+    setTimeout(() => { loadD(); }, 1500);
+  } else {
+    if(msg){ msg.style.color='#e05a2b'; msg.textContent = '⚠️ ' + ok + ' OK, erreurs: ' + errors.join(' | '); }
+  }
+  if(btn) btn.disabled = false;
 }
 
 function startBackupScheduler(){
