@@ -1323,16 +1323,34 @@ function showLogin(){
 // ═══════════════════════════════════════════════════════
 
 function boot(){
-  // Charger les plateformes puis afficher l'écran de sélection
-  FB.get('platforms').then(fbPlats=>{
-    if(fbPlats && fbPlats.length) _platformsCache=fbPlats;
-    else { _platformsCache=DEFAULT_PLATFORMS; FB.set('platforms',DEFAULT_PLATFORMS); }
-    renderPlatformScreen();
-  }).catch(()=>{ renderPlatformScreen(); });
-
   // Vérifier connexion Firebase
   checkFBConnection();
   setInterval(checkFBConnection, 10000);
+
+  FB.get('platforms').then(fbPlats=>{
+    if(fbPlats && fbPlats.length) _platformsCache=fbPlats;
+    else { _platformsCache=DEFAULT_PLATFORMS; FB.set('platforms',DEFAULT_PLATFORMS); }
+
+    // Si une session active existe avec une plateforme → passer directement
+    const sess = getSession();
+    if(sess && sess.platform){
+      // Vérifier expiration
+      if(sess.loginAt && (Date.now()-sess.loginAt) >= SESSION_MAX_MS){
+        setSession(null);
+        renderPlatformScreen();
+        return;
+      }
+      currentPlatform = sess.platform;
+      const plat = getPlatforms().find(p=>p.id===currentPlatform);
+      if(plat){
+        // Mettre à jour le badge plateforme directement
+        document.getElementById('platformSel') && (document.getElementById('platformSel').value=currentPlatform);
+        loadPlatformBases().then(()=>bootAfterPlatform());
+        return;
+      }
+    }
+    renderPlatformScreen();
+  }).catch(()=>{ renderPlatformScreen(); });
 }
 
 // ═══════════════════ SETUP (first admin) ═══════════════════
