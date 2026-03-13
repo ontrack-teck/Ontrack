@@ -1059,16 +1059,35 @@ const getSessions=()=>LS.get('sgo_sessions')||[];
 const setSessions=s=>LS.set('sgo_sessions',s);
 const getSession=()=>LS.get('sgo_sess'); // session active courante
 const setSession=v=>v?LS.set('sgo_sess',v):LS.del('sgo_sess');
+
+const SESSION_MAX_MS = 8 * 60 * 60 * 1000; // 8h max même si actif
+
 function addSession(sess){
-  // Ajouter/mettre à jour la session dans la liste des comptes sur cet appareil
   const sessions=getSessions();
   const idx=sessions.findIndex(s=>s.email===sess.email);
-  const entry={email:sess.email,tok:sess.tok,base:sess.base||currentBase,role:currentUser?.role||'user'};
+  const entry={email:sess.email,tok:sess.tok,base:sess.base||currentBase,role:currentUser?.role||'user',loginAt:Date.now()};
   if(idx>=0) sessions[idx]=entry; else sessions.push(entry);
   setSessions(sessions);
+  // Horodater aussi la session courante
+  const cur=getSession();
+  if(cur){ cur.loginAt=Date.now(); setSession(cur); }
 }
 function removeStoredSession(email){
   setSessions(getSessions().filter(s=>s.email!==email));
+}
+
+function checkSessionExpiry(){
+  const sess=getSession();
+  if(!sess||!currentUser) return;
+  // Expiration absolue : 8h après connexion
+  if(sess.loginAt && (Date.now()-sess.loginAt) >= SESSION_MAX_MS){
+    autoLogout('expired');
+  }
+}
+
+function startSessionExpiryWatch(){
+  // Vérifier toutes les minutes
+  setInterval(checkSessionExpiry, 60*1000);
 }
 const getLock=()=>LS.get('sgo_lock')||{n:0,until:0};
 const setLock=v=>LS.set('sgo_lock',v);
@@ -1132,12 +1151,12 @@ function resetInactivityTimer(){
   updateInactBadge();
 }
 
-function autoLogout(){
+function autoLogout(reason){
   if(!currentUser) return;
-  // Garde le compte dans le picker mais déconnecte la session
   setSession(null);
   currentUser=null;
   clearTimeout(inactivityTimer);
+  stopPresence();
   const shell=document.getElementById('shell');
   if(shell) shell.classList.remove('on');
   const stored=getSessions();
@@ -1149,6 +1168,11 @@ function autoLogout(){
     const li=document.getElementById('scrLogin');
     if(li) li.classList.add('on');
     startLockUI();
+  }
+  // Afficher message selon la raison
+  if(reason==='expired'){
+    const err=document.getElementById('li_err')||document.getElementById('pk_msg');
+    if(err){ err.textContent='⏱ Session expirée après 8h — reconnectez-vous.'; err.classList.add('on'); }
   }
 }
 
@@ -1511,6 +1535,7 @@ function showApp(){
   safe2('paneConfig',el=>el.style.display=canDo('manageConfig')?'':'none');
   safe2('paneUsers',el=>el.style.display=canDo('manageUsers')?'':'none');
   startInactivityWatch();
+  startSessionExpiryWatch();
   startPresence();
   if(currentUser.role === 'admin'){ startBackupScheduler(); updateBackupUI(); }
   renderPlatformBar();
@@ -2252,10 +2277,14 @@ function selectPlatform(id){
 
 function bootAfterPlatform(){
   const _sess = getSession();
-  // Session active → connexion automatique
+  // Session active → vérifier expiration absolue (8h)
   if(_sess && _sess.platform === currentPlatform){
-    const u = getUsers().find(u=>u.email===_sess.email && userHasToken(u,_sess.tok));
-    if(u && u.status==='active'){ currentUser={email:u.email,role:u.role}; showApp(); return; }
+    if(_sess.loginAt && (Date.now()-_sess.loginAt) >= SESSION_MAX_MS){
+      setSession(null); // Session expirée
+    } else {
+      const u = getUsers().find(u=>u.email===_sess.email && userHasToken(u,_sess.tok));
+      if(u && u.status==='active'){ currentUser={email:u.email,role:u.role}; showApp(); return; }
+    }
   }
   // Comptes enregistrés → picker
   const stored = getSessions();
