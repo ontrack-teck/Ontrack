@@ -1484,6 +1484,14 @@ async function doLogin(){
   addSession({email:em,tok,base:currentBase});
   document.getElementById('scrLogin').classList.remove('on');
   showApp();
+  // Notification connexion (après showApp pour avoir les abonnements chargés)
+  setTimeout(()=>{
+    sendPushToAdmins(
+      '👤 Connexion — ' + currentBase,
+      em + ' vient de se connecter sur ' + currentBase,
+      'user-login'
+    );
+  }, 3000);
 }
 
 function doLogout(){
@@ -1555,6 +1563,7 @@ function showApp(){
   startInactivityWatch();
   startSessionExpiryWatch();
   startPresence();
+  startPushPolling();
   if(currentUser.role === 'admin'){ startBackupScheduler(); updateBackupUI(); }
   renderPlatformBar();
   renderBaseBar();
@@ -2243,6 +2252,134 @@ function startBackupScheduler(){
   _backupTimer = setInterval(() => {
     if(currentUser && currentUser.role === 'admin') checkAutoBackup();
   }, 60 * 60 * 1000);
+}
+
+// ═══════════════════ NOTIFICATIONS PUSH ═══════════════════
+const VAPID_PUBLIC = 'BCgZGErMvsCsOYcjUtygLu-DEX3SkGErOvTv8--iC3NgL1Nbpc-sROZLZs3QSVDNMtA5tysn9xV1DYz7779ir7g';
+
+function urlBase64ToUint8Array(base64String){
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = atob(base64);
+  return new Uint8Array([...rawData].map(c => c.charCodeAt(0)));
+}
+
+async function initPush(){
+  if(!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+  if(!currentUser) return;
+  const role = currentUser.role;
+  if(role !== 'admin' && role !== 'superuser') return;
+
+  try {
+    const reg = await navigator.serviceWorker.register('/Ontrack/sw.js');
+    await navigator.serviceWorker.ready;
+
+    // Vérifier permission
+    let perm = Notification.permission;
+    if(perm === 'default') perm = await Notification.requestPermission();
+    if(perm !== 'granted') return;
+
+    // S'abonner
+    const sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC)
+    });
+
+    // Sauvegarder l'abonnement dans Firebase
+    const subData = {
+      email: currentUser.email,
+      role: currentUser.role,
+      base: currentBase,
+      platform: currentPlatform,
+      sub: JSON.parse(JSON.stringify(sub)),
+      ts: Date.now()
+    };
+    const deviceKey = 'push_' + btoa(sub.endpoint).slice(-20).replace(/[^a-z0-9]/gi,'');
+    await FB.set('push__subscriptions/' + deviceKey, subData);
+    console.log('Push: abonnement enregistré');
+  } catch(e) {
+    console.warn('Push init error:', e.message);
+  }
+}
+
+async function sendPushToAdmins(title, body, tag){
+  // Récupérer tous les abonnements admin/superuser
+  const subs = await FB.get('push__subscriptions').catch(()=>null);
+  if(!subs) return;
+
+  const subsArr = Array.isArray(subs) ? subs : Object.values(subs);
+  const targets = subsArr.filter(s => s && (s.role==='admin'||s.role==='superuser') && s.email !== currentUser?.email);
+  if(!targets.length) return;
+
+  // Stocker une notification dans Firebase pour chaque destinataire
+  // (Le push réel nécessite un serveur — on utilise Firebase comme pont)
+  const notifKey = 'push__pending/' + Date.now().toString(36);
+  await FB.set(notifKey, {
+    title,
+    body,
+    tag: tag || 'ontrack',
+    targets: targets.map(t=>t.email),
+    from: currentUser?.email,
+    base: currentBase,
+    platform: currentPlatform,
+    ts: Date.now(),
+    read: false
+  });
+
+  // Notification locale immédiate (pour l'expéditeur non)
+  // Notifier localement les autres onglets ouverts via BroadcastChannel
+  if('BroadcastChannel' in window){
+    const bc = new BroadcastChannel('ontrack_push');
+    bc.postMessage({title, body, tag});
+    bc.close();
+  }
+}
+
+// Écouter les notifications des autres onglets
+function startPushListener(){
+  if(!('BroadcastChannel' in window)) return;
+  const bc = new BroadcastChannel('ontrack_push');
+  bc.onmessage = e => {
+    const {title, body} = e.data;
+    if(Notification.permission === 'granted'){
+      new Notification(title, {body, icon: '/Ontrack/icon-192.png', badge: '/Ontrack/icon-72.png'});
+    }
+  };
+}
+
+// Vérifier les notifications en attente dans Firebase (polling)
+let _lastPushCheck = Date.now();
+async function checkPendingPush(){
+  if(!currentUser) return;
+  const role = currentUser.role;
+  if(role !== 'admin' && role !== 'superuser') return;
+  if(Notification.permission !== 'granted') return;
+
+  const pending = await FB.get('push__pending').catch(()=>null);
+  if(!pending) return;
+
+  const entries = Array.isArray(pending) ? pending : Object.entries(pending).map(([k,v])=>({...v,_key:k}));
+  const myNotifs = entries.filter(n =>
+    n && n.ts > _lastPushCheck &&
+    n.targets && n.targets.includes(currentUser.email) &&
+    !n.read
+  );
+
+  for(const n of myNotifs){
+    new Notification(n.title||'ONTRACK', {
+      body: n.body||'',
+      icon: '/Ontrack/icon-192.png',
+      tag: n.tag||'ontrack'
+    });
+  }
+
+  if(myNotifs.length > 0) _lastPushCheck = Date.now();
+}
+
+function startPushPolling(){
+  startPushListener();
+  initPush();
+  setInterval(checkPendingPush, 15000); // vérifier toutes les 15s
 }
 
 // ═══════════════════ PLATFORM SELECTION SCREEN ═══════════════════
@@ -3802,10 +3939,16 @@ async function saveV(){ if(!canDo('createVehicle')){alert('Accès refusé.');ret
   if(!n){alert(T().alertN);return;}
   const v={id:uid(),name:n,plate:p,type:t,createdBy:currentUser?.email,createdAt:new Date().toISOString()};
   data.vehicles.push(v);
-  selVid=v.id;  // Fixer selVid AVANT saveD pour que le listener préserve la sélection
+  selVid=v.id;
   closeMo('moV');
-  render();     // Render immédiat pour afficher le véhicule
-  await saveD(); // Puis sauvegarder en arrière-plan
+  render();
+  await saveD();
+  // Notification push
+  sendPushToAdmins(
+    '🚗 Nouveau véhicule — ' + currentBase,
+    v.name + (v.plate ? ' (' + v.plate + ')' : '') + ' ajouté par ' + (currentUser?.email||''),
+    'new-vehicle'
+  );
 }
 function saveI(){
   if(!canDo('createIntervention')){alert('Accès refusé.');return;}
@@ -3827,6 +3970,13 @@ function saveI(){
   pendingAttachments=[];
   closeMo('moI');curYear=new Date(d).getFullYear();render();
   saveD().catch(()=>alert('Erreur de sauvegarde.'));
+  // Notification push
+  const vName = data.vehicles.find(v=>v.id===selVid)?.name || selVid;
+  sendPushToAdmins(
+    '🔧 Nouvelle intervention — ' + currentBase,
+    tp + ' sur ' + vName + ' par ' + (tech||currentUser?.email||''),
+    'new-intervention'
+  );
 }
 function delV(id){
   if(!canDo('deleteVehicle'))return;
