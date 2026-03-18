@@ -1064,8 +1064,35 @@ const setUsers=async u=>{
 // Multi-session: stocke un tableau de sessions actives sur cet appareil
 const getSessions=()=>LS.get('sgo_sessions')||[];
 const setSessions=s=>LS.set('sgo_sessions',s);
-const getSession=()=>LS.get('sgo_sess'); // session active courante
-const setSession=v=>v?LS.set('sgo_sess',v):LS.del('sgo_sess');
+const getSession=()=>{
+  // localStorage d'abord
+  let s = LS.get('sgo_sess');
+  if(s) return s;
+  // Fallback sessionStorage (persiste pendant la session du navigateur)
+  try{
+    const bk = sessionStorage.getItem('sgo_sess_bk');
+    if(bk){
+      const parsed = JSON.parse(bk);
+      // Restaurer dans localStorage
+      LS.set('sgo_sess', parsed);
+      return parsed;
+    }
+  }catch(e){}
+  // Fallback backup localStorage
+  return LS.get('sgo_sess_bk') || null;
+};
+const setSession=v=>{
+  if(v){
+    LS.set('sgo_sess',v);
+    // Backup dans sessionStorage pour mobile
+    try{ sessionStorage.setItem('sgo_sess_bk', JSON.stringify(v)); }catch(e){}
+    LS.set('sgo_sess_bk',v);
+  } else {
+    LS.del('sgo_sess');
+    LS.del('sgo_sess_bk');
+    try{ sessionStorage.removeItem('sgo_sess_bk'); }catch(e){}
+  }
+};
 
 const SESSION_MAX_MS = 8 * 60 * 60 * 1000; // 8h max même si actif
 
@@ -1338,26 +1365,29 @@ function boot(){
   checkFBConnection();
   setInterval(checkFBConnection, 10000);
 
+  _platformsCache = DEFAULT_PLATFORMS;
+
   const sess = getSession();
 
-  // Toujours charger les plateformes depuis Firebase d'abord
-  _platformsCache = DEFAULT_PLATFORMS;
+  // Si session valide → ne pas attendre Firebase, démarrer immédiatement
+  if(sess && sess.platform && !(sess.loginAt && (Date.now()-sess.loginAt) >= SESSION_MAX_MS)){
+    currentPlatform = sess.platform;
+    // Charger Firebase en parallèle (non bloquant)
+    FB.get('platforms').then(fbPlats=>{
+      if(fbPlats && fbPlats.length) _platformsCache = fbPlats;
+    }).catch(()=>{});
+    loadPlatformBases().then(()=> bootAfterPlatform());
+    return;
+  }
+
+  // Pas de session → charger plateformes puis afficher écran sélection
+  if(sess && sess.loginAt && (Date.now()-sess.loginAt) >= SESSION_MAX_MS) setSession(null);
 
   FB.get('platforms').then(fbPlats=>{
     if(fbPlats && fbPlats.length) _platformsCache = fbPlats;
     else FB.set('platforms', DEFAULT_PLATFORMS);
-
-    if(sess && sess.platform && !(sess.loginAt && (Date.now()-sess.loginAt) >= SESSION_MAX_MS)){
-      // Session valide → charger bases puis tenter auto-login
-      currentPlatform = sess.platform;
-      loadPlatformBases().then(()=> bootAfterPlatform());
-    } else {
-      // Pas de session ou expirée
-      if(sess && sess.loginAt && (Date.now()-sess.loginAt) >= SESSION_MAX_MS) setSession(null);
-      renderPlatformScreen();
-    }
+    renderPlatformScreen();
   }).catch(()=>{
-    _platformsCache = DEFAULT_PLATFORMS;
     renderPlatformScreen();
   });
 }
