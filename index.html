@@ -497,7 +497,14 @@ tbody td{padding:11px 17px;font-size:12px;}
   <div class="hctrls">
     <button class="hdrbtn" id="presenceBtn" onclick="togglePresencePanel()" title="Utilisateurs connectés" style="display:none;">🟢 <span id="presenceCount">0</span></button>
     <span id="platformBadge" onclick="goToPlatformScreen()" title="Changer de plateforme" style="font-family:'DM Mono',monospace;font-size:11px;font-weight:700;padding:5px 12px;border-radius:20px;border:2px solid #f0a500;color:#f0a500;cursor:pointer;transition:all .2s;display:none;"></span>
-    <select id="baseSel" class="bsel" onchange="switchBase(this.value)" title="Changer de base"></select>
+    <select id="baseSel" class="bsel" onchange="switchBase(this.value)" title="Changer de base" style="display:none;"></select>
+    <!-- Custom base dropdown -->
+    <div style="position:relative;" id="baseDropWrap">
+      <button id="baseDropBtn" onclick="toggleBaseDropdown()" style="font-family:'DM Mono',monospace;font-size:12px;font-weight:700;background:var(--surface2);padding:5px 12px 5px 14px;border-radius:20px;border:2px solid #f0a500;color:#f0a500;cursor:pointer;display:flex;align-items:center;gap:6px;max-width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+        <span id="baseDropLabel">—</span><span style="font-size:10px;">▼</span>
+      </button>
+      <div id="baseDropMenu" style="display:none;position:absolute;top:calc(100% + 6px);left:0;z-index:999;background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:6px;min-width:180px;max-height:320px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.4);"></div>
+    </div>
     <!-- Hidden selects kept for JS compatibility -->
     <select id="platformSel" style="display:none;"></select>
     <select id="yearFilter" class="ysel"></select>
@@ -2562,14 +2569,60 @@ async function switchPlatform(id){
 function renderBaseBar(){
   const bases=getBases();
   const isAdmin=currentUser?.role==='admin';
-  const sel=document.getElementById('baseSel');if(!sel)return;
+  // Garder le select caché synchronisé pour compatibilité
+  const sel=document.getElementById('baseSel');
+  if(sel){
+    sel.innerHTML=bases.map(x=>`<option value="${x.id}" ${x.id===currentBase?'selected':''}>${x.name}</option>`).join('')
+      +(isAdmin?`<option value="__add__">+ Nouvelle base</option>`:'');
+  }
   const b=bases.find(x=>x.id===currentBase);
   const color=b?b.color:'#f0a500';
-  sel.innerHTML=bases.map(x=>`<option value="${x.id}" ${x.id===currentBase?'selected':''}>${x.name}</option>`).join('')
-    +(isAdmin?`<option value="__add__">+ Nouvelle base</option>`:'');
-  sel.style.borderColor=color;
-  sel.style.color=color;
+
+  // Mettre à jour le bouton custom
+  const btn=document.getElementById('baseDropBtn');
+  const lbl=document.getElementById('baseDropLabel');
+  if(btn && lbl){
+    lbl.textContent=b?b.name:'—';
+    btn.style.borderColor=color;
+    btn.style.color=color;
+    btn.style.display='';
+  }
+
+  // Construire le menu
+  const menu=document.getElementById('baseDropMenu');
+  if(!menu) return;
+  menu.innerHTML=bases.map(x=>`
+    <button onclick="switchBase('${x.id}');closeBaseDropdown()" style="
+      display:flex;align-items:center;gap:10px;width:100%;background:${x.id===currentBase?'var(--surface)':'none'};
+      border:none;color:${x.id===currentBase?x.color:'var(--text)'};padding:9px 12px;border-radius:8px;
+      cursor:pointer;font-family:'DM Mono',monospace;font-size:12px;font-weight:${x.id===currentBase?'700':'400'};text-align:left;"
+      onmouseover="this.style.background='var(--surface)'" onmouseout="this.style.background='${x.id===currentBase?'var(--surface)':'none'}'">
+      <span style="width:10px;height:10px;border-radius:50%;background:${x.color};flex-shrink:0;display:inline-block;"></span>
+      ${x.name}
+      ${x.id===currentBase?'<span style="margin-left:auto;font-size:10px;">✓</span>':''}
+    </button>`).join('')
+    +(isAdmin?`<div style="height:1px;background:var(--border);margin:4px 0;"></div>
+    <button onclick="openBM();closeBaseDropdown()" style="display:flex;align-items:center;gap:10px;width:100%;background:none;border:none;color:var(--accent);padding:9px 12px;border-radius:8px;cursor:pointer;font-family:'DM Mono',monospace;font-size:12px;text-align:left;"
+      onmouseover="this.style.background='var(--surface)'" onmouseout="this.style.background='none'">
+      ＋ Nouvelle base</button>`:'');
 }
+
+function toggleBaseDropdown(){
+  const menu=document.getElementById('baseDropMenu');
+  if(!menu) return;
+  menu.style.display = menu.style.display==='none' ? 'block' : 'none';
+}
+
+function closeBaseDropdown(){
+  const menu=document.getElementById('baseDropMenu');
+  if(menu) menu.style.display='none';
+}
+
+// Fermer le dropdown base si clic ailleurs
+document.addEventListener('click', e=>{
+  const wrap=document.getElementById('baseDropWrap');
+  if(wrap && !wrap.contains(e.target)) closeBaseDropdown();
+});
 
 function switchBase(id){
   if(id==='__add__'){openBM();renderBaseBar();return;}
@@ -3754,6 +3807,9 @@ function renderDet(id){
     </div>`;
 }
 
+let itPage = {}; // pagination par type : {type: pageIndex}
+const IT_PER_PAGE = 20; // véhicules par page par type
+
 function renderIT(){
   const L=T(),yi=data.interventions.filter(i=>new Date(i.date).getFullYear()===curYear);
   const ut=[...new Set(yi.map(i=>i.type))];
@@ -3766,12 +3822,58 @@ function renderIT(){
     yi.filter(i=>i.type===tp).forEach(i=>{if(vc[i.vehicleId]!==undefined)vc[i.vehicleId]++;});
     const mx=Math.max(1,...Object.values(vc));
     const inv=data.vehicles.filter(v=>vc[v.id]>0).sort((a,b)=>vc[b.id]-vc[a.id]);
-    h+=`<div class="itc"><div class="ith"><div class="itd" style="background:${col}"></div><div class="itn">${tp}</div><div class="its">${tot[tp]} ${L.itTimes}</div><div class="itbg">${tot[tp]}</div></div>`;
-    if(!inv.length)h+=`<div style="padding:11px 18px;font-size:12px;color:var(--muted);">${L.noVIn}</div>`;
-    else inv.forEach(v=>{const c=vc[v.id];h+=`<div class="ivr"><div class="ivn">${v.name}</div><div class="ivp">${v.plate}</div><div class="ivb"><div class="ivbf" style="width:${(c/mx)*100}%;background:${col}"></div></div><div class="ivc" style="color:${col}">${c}</div></div>`;});
+
+    // Pagination
+    const page = itPage[tp] || 0;
+    const totalPages = Math.ceil(inv.length / IT_PER_PAGE);
+    const pageItems = inv.slice(page * IT_PER_PAGE, (page+1) * IT_PER_PAGE);
+    const isCollapsed = itPage[tp+'_collapsed'];
+
+    h+=`<div class="itc">
+      <div class="ith" onclick="toggleITSection('${tp.replace(/'/g,"\\'")}')" style="cursor:pointer;">
+        <div class="itd" style="background:${col}"></div>
+        <div class="itn">${tp}</div>
+        <div class="its">${tot[tp]} ${L.itTimes}</div>
+        <div class="itbg">${tot[tp]}</div>
+        <div style="margin-left:auto;color:var(--muted);font-size:14px;transition:.2s;">${isCollapsed?'▶':'▼'}</div>
+      </div>`;
+
+    if(!isCollapsed){
+      if(!inv.length){
+        h+=`<div style="padding:11px 18px;font-size:12px;color:var(--muted);">${L.noVIn}</div>`;
+      } else {
+        pageItems.forEach(v=>{const c=vc[v.id];h+=`<div class="ivr"><div class="ivn">${v.name}</div><div class="ivp">${v.plate}</div><div class="ivb"><div class="ivbf" style="width:${(c/mx)*100}%;background:${col}"></div></div><div class="ivc" style="color:${col}">${c}</div></div>`;});
+        // Pagination controls
+        if(totalPages > 1){
+          const tpEncoded = encodeURIComponent(tp);
+          h+=`<div style="display:flex;align-items:center;justify-content:center;gap:8px;padding:10px 16px;border-top:1px solid var(--border);font-size:12px;color:var(--muted);">`;
+          h+=`<button onclick="itPageNav('${tpEncoded}',-1)" ${page===0?'disabled':''} style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:4px 10px;border-radius:6px;cursor:pointer;">◀</button>`;
+          h+=`<span style="font-family:'DM Mono',monospace;">${page+1} / ${totalPages} <span style="color:var(--muted);">(${inv.length} véhicules)</span></span>`;
+          h+=`<button onclick="itPageNav('${tpEncoded}',1)" ${page>=totalPages-1?'disabled':''} style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:4px 10px;border-radius:6px;cursor:pointer;">▶</button>`;
+          h+=`</div>`;
+        }
+      }
+    }
     h+=`</div>`;
   });
   document.getElementById('iTabC').innerHTML=h;
+}
+
+function toggleITSection(tp){
+  itPage[tp+'_collapsed'] = !itPage[tp+'_collapsed'];
+  renderIT();
+}
+
+function itPageNav(tpEncoded, dir){
+  const tp = decodeURIComponent(tpEncoded);
+  const yi = data.interventions.filter(i=>new Date(i.date).getFullYear()===curYear);
+  const vc={};data.vehicles.forEach(v=>{vc[v.id]=0;});
+  yi.filter(i=>i.type===tp).forEach(i=>{if(vc[i.vehicleId]!==undefined)vc[i.vehicleId]++;});
+  const inv=data.vehicles.filter(v=>vc[v.id]>0);
+  const totalPages=Math.ceil(inv.length/IT_PER_PAGE);
+  const cur=itPage[tp]||0;
+  itPage[tp]=Math.max(0,Math.min(totalPages-1,cur+dir));
+  renderIT();
 }
 
 function renderBT(){
