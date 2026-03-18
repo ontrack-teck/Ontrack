@@ -1,21 +1,27 @@
-// ONTRACK — Service Worker v1.0
-// Gère les notifications push en arrière-plan
+// ONTRACK — Service Worker v1.1
+// Gère uniquement les notifications push — pas de cache
 
 self.addEventListener('install', e => {
   self.skipWaiting();
 });
 
 self.addEventListener('activate', e => {
-  e.waitUntil(self.clients.claim());
+  // Supprimer tous les anciens caches
+  e.waitUntil(
+    caches.keys().then(keys => 
+      Promise.all(keys.map(key => caches.delete(key)))
+    ).then(() => self.clients.claim())
+  );
 });
+
+// Ne pas intercepter les requêtes — laisser le navigateur gérer normalement
+// (pas de stratégie cache-first qui bloquerait les mises à jour)
 
 self.addEventListener('push', e => {
   if(!e.data) return;
-
   let payload;
   try { payload = e.data.json(); }
-  catch { payload = { title: 'ONTRACK', body: e.data.text(), icon: '/Ontrack/icon.png' }; }
-
+  catch { payload = { title: 'ONTRACK', body: e.data.text() }; }
   const title = payload.title || 'ONTRACK';
   const options = {
     body: payload.body || '',
@@ -26,7 +32,6 @@ self.addEventListener('push', e => {
     vibrate: [200, 100, 200],
     requireInteraction: false
   };
-
   e.waitUntil(self.registration.showNotification(title, options));
 });
 

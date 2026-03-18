@@ -2441,32 +2441,22 @@ function selectPlatform(id){
 
 async function bootAfterPlatform(){
   const _sess = getSession();
-  console.log('[BOOT] session:', _sess ? JSON.stringify({email:_sess.email, platform:_sess.platform, base:_sess.base, hasTok:!!_sess.tok, loginAt:_sess.loginAt}) : 'null');
-  console.log('[BOOT] currentPlatform:', currentPlatform, '| currentBase:', currentBase);
-
   if(_sess && _sess.platform === currentPlatform){
     if(_sess.loginAt && (Date.now()-_sess.loginAt) >= SESSION_MAX_MS){
-      console.log('[BOOT] session expirée');
       setSession(null);
     } else {
       if(_sess.base) currentBase = _sess.base;
-      console.log('[BOOT] chargement users de:', currentBase+'__users');
       const fbUsers = await FB.get(currentBase+'__users').catch(()=>null) || [];
-      console.log('[BOOT] users chargés:', fbUsers.length, '| cherche email:', _sess.email, '| tok:', _sess.tok?.slice(0,8));
       if(fbUsers.length) _usersCache = fbUsers;
       const u = getUsers().find(u=>u.email===_sess.email && userHasToken(u,_sess.tok) && u.status==='active');
-      console.log('[BOOT] user trouvé:', u ? u.email+'/'+u.role : 'NON TROUVÉ');
       if(u){
         currentUser={email:u.email,role:u.role};
         showApp();
         return;
       }
     }
-  } else {
-    console.log('[BOOT] pas de session ou plateforme différente. sess.platform=', _sess?.platform, 'currentPlatform=', currentPlatform);
   }
   const stored = getSessions();
-  console.log('[BOOT] sessions stockées:', stored.length);
   if(stored.length>0){ renderAccountPicker(); document.getElementById('scrPick').classList.add('on'); return; }
   const users = getUsers();
   if(!users.length){ document.getElementById('scrSetup').classList.add('on'); return; }
