@@ -1327,30 +1327,40 @@ function boot(){
   checkFBConnection();
   setInterval(checkFBConnection, 10000);
 
-  FB.get('platforms').then(fbPlats=>{
-    if(fbPlats && fbPlats.length) _platformsCache=fbPlats;
-    else { _platformsCache=DEFAULT_PLATFORMS; FB.set('platforms',DEFAULT_PLATFORMS); }
+  // Afficher immédiatement avec les plateformes par défaut (pas d'attente Firebase)
+  _platformsCache = DEFAULT_PLATFORMS;
 
-    // Si une session active existe avec une plateforme → passer directement
-    const sess = getSession();
-    if(sess && sess.platform){
-      // Vérifier expiration
-      if(sess.loginAt && (Date.now()-sess.loginAt) >= SESSION_MAX_MS){
-        setSession(null);
-        renderPlatformScreen();
-        return;
-      }
+  // Si session active → passer directement sans attendre Firebase
+  const sess = getSession();
+  if(sess && sess.platform){
+    if(sess.loginAt && (Date.now()-sess.loginAt) >= SESSION_MAX_MS){
+      setSession(null);
+    } else {
       currentPlatform = sess.platform;
       const plat = getPlatforms().find(p=>p.id===currentPlatform);
       if(plat){
-        // Mettre à jour le badge plateforme directement
         document.getElementById('platformSel') && (document.getElementById('platformSel').value=currentPlatform);
+        // Charger Firebase en arrière-plan puis continuer
+        FB.get('platforms').then(fbPlats=>{
+          if(fbPlats && fbPlats.length) _platformsCache=fbPlats;
+        }).catch(()=>{});
         loadPlatformBases().then(()=>bootAfterPlatform());
         return;
       }
     }
-    renderPlatformScreen();
-  }).catch(()=>{ renderPlatformScreen(); });
+  }
+
+  // Pas de session — afficher l'écran plateforme immédiatement
+  renderPlatformScreen();
+  document.getElementById('scrPlatform').classList.add('on');
+
+  // Mettre à jour les plateformes depuis Firebase en arrière-plan
+  FB.get('platforms').then(fbPlats=>{
+    if(fbPlats && fbPlats.length){
+      _platformsCache=fbPlats;
+      renderPlatformScreen(); // Rafraîchir si données différentes
+    }
+  }).catch(()=>{});
 }
 
 // ═══════════════════ SETUP (first admin) ═══════════════════
@@ -2483,22 +2493,29 @@ async function loadPlatformBases(){
 }
 
 async function ensureAdminInBase(baseId){
-  // Récupérer les admins depuis la base SGO (source de vérité)
+  // Ne jamais modifier SGO lui-même
+  if(baseId === 'SGO') return;
+  
+  // Récupérer les admins depuis SGO (source de vérité)
   const srcUsers = await FB.get('SGO__users').catch(()=>null) || [];
   const admins = srcUsers.filter(u=>u.role==='admin');
   if(!admins.length) return;
+  
   const existing = await FB.get(baseId+'__users').catch(()=>null) || [];
   let changed = false;
+  
   for(const admin of admins){
     const found = existing.find(u=>u.email===admin.email);
     if(!found){
+      // Ajouter uniquement si absent — ne jamais écraser les users existants
       existing.push({email:admin.email, h:admin.h, role:'admin', status:'active', tok:null, tokens:{}});
       changed = true;
-    } else if(found.h !== admin.h){
-      // Synchroniser le hash si différent
+    } else if(found.h !== admin.h && found.role === 'admin'){
+      // Synchroniser le hash UNIQUEMENT si c'est déjà un admin
       found.h = admin.h;
       changed = true;
     }
+    // Ne jamais changer le rôle d'un utilisateur existant
   }
   if(changed) await FB.set(baseId+'__users', existing);
 }
