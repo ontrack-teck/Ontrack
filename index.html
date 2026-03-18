@@ -2442,18 +2442,19 @@ function selectPlatform(id){
   bootAfterPlatform();
 }
 
-function bootAfterPlatform(){
+async function bootAfterPlatform(){
   const _sess = getSession();
   if(_sess && _sess.platform === currentPlatform){
     if(_sess.loginAt && (Date.now()-_sess.loginAt) >= SESSION_MAX_MS){
       setSession(null);
     } else {
-      const u = getUsers().find(u=>u.email===_sess.email && userHasToken(u,_sess.tok));
-      if(u && u.status==='active'){
-        // Restaurer la base sauvegardée
-        if(_sess.base && getBases().find(b=>b.id===_sess.base)){
-          currentBase = _sess.base;
-        }
+      // Utiliser la base de la session pour charger les bons users
+      const baseToLoad = (_sess.base && getBases().find(b=>b.id===_sess.base)) ? _sess.base : currentBase;
+      if(baseToLoad) currentBase = baseToLoad;
+      const fbUsers = await FB.get(currentBase+'__users').catch(()=>null) || [];
+      if(fbUsers.length) _usersCache = fbUsers;
+      const u = getUsers().find(u=>u.email===_sess.email && userHasToken(u,_sess.tok) && u.status==='active');
+      if(u){
         currentUser={email:u.email,role:u.role};
         showApp();
         return;
