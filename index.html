@@ -1338,6 +1338,26 @@ function boot(){
   checkFBConnection();
   setInterval(checkFBConnection, 10000);
 
+  // Vérifier si session active avec plateforme connue
+  const sess = getSession();
+  if(sess && sess.platform){
+    // Session expirée ?
+    if(sess.loginAt && (Date.now()-sess.loginAt) >= SESSION_MAX_MS){
+      setSession(null);
+    } else {
+      // Session valide → charger directement sans passer par l'écran plateforme
+      currentPlatform = sess.platform;
+      _platformsCache = DEFAULT_PLATFORMS;
+      // Charger bases + données puis tenter connexion auto
+      FB.get('platforms').then(fbPlats=>{
+        if(fbPlats && fbPlats.length) _platformsCache = fbPlats;
+      }).catch(()=>{});
+      loadPlatformBases().then(()=> bootAfterPlatform());
+      return;
+    }
+  }
+
+  // Pas de session → écran sélection plateforme normal
   FB.get('platforms').then(fbPlats=>{
     if(fbPlats && fbPlats.length) _platformsCache=fbPlats;
     else { _platformsCache=DEFAULT_PLATFORMS; FB.set('platforms',DEFAULT_PLATFORMS); }
@@ -2429,7 +2449,15 @@ function bootAfterPlatform(){
       setSession(null);
     } else {
       const u = getUsers().find(u=>u.email===_sess.email && userHasToken(u,_sess.tok));
-      if(u && u.status==='active'){ currentUser={email:u.email,role:u.role}; showApp(); return; }
+      if(u && u.status==='active'){
+        // Restaurer la base sauvegardée
+        if(_sess.base && getBases().find(b=>b.id===_sess.base)){
+          currentBase = _sess.base;
+        }
+        currentUser={email:u.email,role:u.role};
+        showApp();
+        return;
+      }
     }
   }
   const stored = getSessions();
