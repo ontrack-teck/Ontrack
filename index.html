@@ -419,7 +419,17 @@ tbody td{padding:11px 17px;font-size:12px;}
       <div style="background:var(--accent);color:#000;font-size:26px;font-weight:900;padding:6px 16px;border-radius:8px;display:inline-block;letter-spacing:1px;">ONTRACK</div>
       <div style="font-size:13px;color:var(--muted);margin-top:8px;font-weight:600;letter-spacing:2px;text-transform:uppercase;">Sélectionnez votre plateforme</div>
     </div>
-    <div id="platformCards" style="display:flex;flex-direction:column;gap:14px;"></div>
+    <!-- Skeleton loader -->
+    <div id="platformSkeleton" style="display:flex;flex-direction:column;gap:14px;">
+      <div style="height:84px;border-radius:14px;background:linear-gradient(90deg,var(--surface2) 25%,var(--surface) 50%,var(--surface2) 75%);background-size:200% 100%;animation:shimmer 1.2s infinite;"></div>
+      <div style="height:84px;border-radius:14px;background:linear-gradient(90deg,var(--surface2) 25%,var(--surface) 50%,var(--surface2) 75%);background-size:200% 100%;animation:shimmer 1.2s infinite;animation-delay:.2s;"></div>
+    </div>
+    <!-- Cartes plateformes (remplies par JS) -->
+    <div id="platformCards" style="display:none;flex-direction:column;gap:14px;"></div>
+    <div id="platformRetry" style="display:none;margin-top:16px;">
+      <div style="color:var(--muted);font-size:12px;margin-bottom:10px;">⚠️ Connexion lente — vérifiez votre réseau</div>
+      <button onclick="retryBoot()" style="background:var(--accent);color:#000;border:none;padding:10px 24px;border-radius:8px;font-weight:700;cursor:pointer;">🔄 Réessayer</button>
+    </div>
   </div>
 </div>
 
@@ -1329,12 +1339,20 @@ function showLogin(){
 }
 // ═══════════════════════════════════════════════════════
 
+function retryBoot(){
+  const sk = document.getElementById('platformSkeleton');
+  if(sk) sk.style.display='flex';
+  const cards = document.getElementById('platformCards');
+  if(cards){ cards.style.display='none'; cards.innerHTML=''; }
+  const retry = document.getElementById('platformRetry');
+  if(retry) retry.style.display='none';
+  boot();
+}
+
 function boot(){
-  // Vérifier connexion Firebase
   checkFBConnection();
   setInterval(checkFBConnection, 10000);
 
-  // Afficher immédiatement avec les plateformes par défaut (pas d'attente Firebase)
   _platformsCache = DEFAULT_PLATFORMS;
 
   // Si session active → passer directement sans attendre Firebase
@@ -1347,7 +1365,6 @@ function boot(){
       const plat = getPlatforms().find(p=>p.id===currentPlatform);
       if(plat){
         document.getElementById('platformSel') && (document.getElementById('platformSel').value=currentPlatform);
-        // Charger Firebase en arrière-plan puis continuer
         FB.get('platforms').then(fbPlats=>{
           if(fbPlats && fbPlats.length) _platformsCache=fbPlats;
         }).catch(()=>{});
@@ -1357,17 +1374,25 @@ function boot(){
     }
   }
 
-  // Pas de session — afficher l'écran plateforme immédiatement
-  renderPlatformScreen();
+  // Pas de session — afficher skeleton puis charger
   document.getElementById('scrPlatform').classList.add('on');
 
-  // Mettre à jour les plateformes depuis Firebase en arrière-plan
+  // Timeout 5s : si Firebase lent → afficher quand même + bouton réessayer
+  const bootTimeout = setTimeout(()=>{
+    renderPlatformScreen();
+    const retry = document.getElementById('platformRetry');
+    if(retry) retry.style.display='block';
+  }, 5000);
+
   FB.get('platforms').then(fbPlats=>{
-    if(fbPlats && fbPlats.length){
-      _platformsCache=fbPlats;
-      renderPlatformScreen(); // Rafraîchir si données différentes
-    }
-  }).catch(()=>{});
+    clearTimeout(bootTimeout);
+    if(fbPlats && fbPlats.length) _platformsCache=fbPlats;
+    else FB.set('platforms', DEFAULT_PLATFORMS);
+    renderPlatformScreen();
+  }).catch(()=>{
+    clearTimeout(bootTimeout);
+    renderPlatformScreen();
+  });
 }
 
 // ═══════════════════ SETUP (first admin) ═══════════════════
@@ -2410,6 +2435,14 @@ function renderPlatformScreen(){
   const plats = getPlatforms();
   const el = document.getElementById('platformCards');
   if(!el) return;
+
+  // Cacher skeleton, afficher cartes
+  const sk = document.getElementById('platformSkeleton');
+  if(sk) sk.style.display='none';
+  const retry = document.getElementById('platformRetry');
+  if(retry) retry.style.display='none';
+  el.style.display='flex';
+
   el.innerHTML = plats.map(p => `
     <button onclick="selectPlatform('${p.id}')" style="
       display:flex;align-items:center;gap:18px;
