@@ -1338,35 +1338,28 @@ function boot(){
   checkFBConnection();
   setInterval(checkFBConnection, 10000);
 
-  // Vérifier si session active avec plateforme connue
   const sess = getSession();
-  if(sess && sess.platform){
-    if(sess.loginAt && (Date.now()-sess.loginAt) >= SESSION_MAX_MS){
-      setSession(null);
-    } else {
-      currentPlatform = sess.platform;
-      _platformsCache = DEFAULT_PLATFORMS;
-      FB.get('platforms').then(fbPlats=>{
-        if(fbPlats && fbPlats.length) _platformsCache = fbPlats;
-      }).catch(()=>{});
-      loadPlatformBases().then(()=> bootAfterPlatform());
-      return;
-    }
-  }
 
-  // Pas de session → afficher immédiatement avec données par défaut
+  // Toujours charger les plateformes depuis Firebase d'abord
   _platformsCache = DEFAULT_PLATFORMS;
-  renderPlatformScreen();
 
-  // Mettre à jour depuis Firebase en arrière-plan
   FB.get('platforms').then(fbPlats=>{
-    if(fbPlats && fbPlats.length){
-      _platformsCache = fbPlats;
-      renderPlatformScreen();
+    if(fbPlats && fbPlats.length) _platformsCache = fbPlats;
+    else FB.set('platforms', DEFAULT_PLATFORMS);
+
+    if(sess && sess.platform && !(sess.loginAt && (Date.now()-sess.loginAt) >= SESSION_MAX_MS)){
+      // Session valide → charger bases puis tenter auto-login
+      currentPlatform = sess.platform;
+      loadPlatformBases().then(()=> bootAfterPlatform());
     } else {
-      FB.set('platforms', DEFAULT_PLATFORMS);
+      // Pas de session ou expirée
+      if(sess && sess.loginAt && (Date.now()-sess.loginAt) >= SESSION_MAX_MS) setSession(null);
+      renderPlatformScreen();
     }
-  }).catch(()=>{});
+  }).catch(()=>{
+    _platformsCache = DEFAULT_PLATFORMS;
+    renderPlatformScreen();
+  });
 }
 
 // ═══════════════════ SETUP (first admin) ═══════════════════
