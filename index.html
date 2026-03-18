@@ -1341,14 +1341,11 @@ function boot(){
   // Vérifier si session active avec plateforme connue
   const sess = getSession();
   if(sess && sess.platform){
-    // Session expirée ?
     if(sess.loginAt && (Date.now()-sess.loginAt) >= SESSION_MAX_MS){
       setSession(null);
     } else {
-      // Session valide → charger directement sans passer par l'écran plateforme
       currentPlatform = sess.platform;
       _platformsCache = DEFAULT_PLATFORMS;
-      // Charger bases + données puis tenter connexion auto
       FB.get('platforms').then(fbPlats=>{
         if(fbPlats && fbPlats.length) _platformsCache = fbPlats;
       }).catch(()=>{});
@@ -1357,12 +1354,19 @@ function boot(){
     }
   }
 
-  // Pas de session → écran sélection plateforme normal
+  // Pas de session → afficher immédiatement avec données par défaut
+  _platformsCache = DEFAULT_PLATFORMS;
+  renderPlatformScreen();
+
+  // Mettre à jour depuis Firebase en arrière-plan
   FB.get('platforms').then(fbPlats=>{
-    if(fbPlats && fbPlats.length) _platformsCache=fbPlats;
-    else { _platformsCache=DEFAULT_PLATFORMS; FB.set('platforms',DEFAULT_PLATFORMS); }
-    renderPlatformScreen();
-  }).catch(()=>{ _platformsCache=DEFAULT_PLATFORMS; renderPlatformScreen(); });
+    if(fbPlats && fbPlats.length){
+      _platformsCache = fbPlats;
+      renderPlatformScreen();
+    } else {
+      FB.set('platforms', DEFAULT_PLATFORMS);
+    }
+  }).catch(()=>{});
 }
 
 // ═══════════════════ SETUP (first admin) ═══════════════════
