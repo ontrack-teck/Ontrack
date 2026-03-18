@@ -2921,6 +2921,11 @@ function renderSIMTab(){
   const el = document.getElementById('simTabC');
   if(!el) return;
 
+  // Préserver le focus et la position du curseur
+  const searchEl = document.getElementById('simSearchInput');
+  const hadFocus = searchEl && document.activeElement === searchEl;
+  const cursorPos = hadFocus ? searchEl.selectionStart : null;
+
   // Toutes les interventions SIM de toutes les années
   const all = data.interventions.filter(i => i.simOld && i.simNew);
 
@@ -3005,18 +3010,18 @@ function renderSIMTab(){
     </div>
 
     <div class="sim-topbar">
-      <input class="sim-search" type="text" placeholder="🔍  Rechercher SIM, technicien, véhicule…"
+      <input class="sim-search" id="simSearchInput" type="text" placeholder="🔍  Rechercher SIM, technicien, véhicule…"
         value="${simSearch.replace(/"/g,'&quot;')}"
-        oninput="simSearch=this.value;renderSIMTab()">
+        oninput="simSearch=this.value;renderSIMTable()">
       <div class="sim-filter-group">
-        <button class="sim-chip ${simFilter==='all'?'active':''}" onclick="simFilter='all';renderSIMTab()">Tous</button>
-        <button class="sim-chip ${simFilter==='2Go'?'active':''}" onclick="simFilter='2Go';renderSIMTab()">2Go</button>
-        <button class="sim-chip ${simFilter==='500'?'active':''}" onclick="simFilter='500';renderSIMTab()">500Mo</button>
+        <button class="sim-chip ${simFilter==='all'?'active':''}" onclick="simFilter='all';renderSIMTable()">Tous</button>
+        <button class="sim-chip ${simFilter==='2Go'?'active':''}" onclick="simFilter='2Go';renderSIMTable()">2Go</button>
+        <button class="sim-chip ${simFilter==='500'?'active':''}" onclick="simFilter='500';renderSIMTable()">500Mo</button>
       </div>
-      <span class="sim-count-badge">${list.length} résultat${list.length!==1?'s':''}</span>
+      <span class="sim-count-badge" id="simCountBadge">${list.length} résultat${list.length!==1?'s':''}</span>
     </div>
 
-    <div class="sim-table-wrap">
+    <div class="sim-table-wrap" id="simTableWrap">
       <table class="sim-table">
         <thead><tr>
           <th>#</th>
@@ -3031,12 +3036,77 @@ function renderSIMTab(){
       </table>
     </div>
   </div>`;
+
+  // Restaurer le focus si l'input avait le focus avant
+  if(hadFocus){
+    const newInput = document.getElementById('simSearchInput');
+    if(newInput){ newInput.focus(); if(cursorPos!==null) newInput.setSelectionRange(cursorPos,cursorPos); }
+  }
+}
+
+function renderSIMTable(){
+  // Met à jour uniquement le tableau et le badge — sans toucher à l'input
+  const tableWrap = document.getElementById('simTableWrap');
+  const badge = document.getElementById('simCountBadge');
+  if(!tableWrap){ renderSIMTab(); return; }
+
+  const all = data.interventions.filter(i => i.simOld && i.simNew);
+  let list = all;
+  if(simFilter !== 'all') list = list.filter(i => i.type.toUpperCase().includes(simFilter.toUpperCase()));
+  const q = simSearch.toLowerCase().trim();
+  if(q) list = list.filter(i =>
+    (i.simOld||'').toLowerCase().includes(q) ||
+    (i.simNew||'').toLowerCase().includes(q) ||
+    (i.tech||'').toLowerCase().includes(q) ||
+    (getVehicleName(i.vehicleId)||'').toLowerCase().includes(q)
+  );
+
+  // Tri
+  list = [...list].sort((a,b)=>{
+    let va='',vb='';
+    if(simSort.col==='vehicle'){va=getVehicleName(a.vehicleId);vb=getVehicleName(b.vehicleId);}
+    else if(simSort.col==='date'){return simSort.dir==='asc'?new Date(a.date)-new Date(b.date):new Date(b.date)-new Date(a.date);}
+    else{va=a[simSort.col]||'';vb=b[simSort.col]||'';}
+    return simSort.dir==='asc'?va.localeCompare(vb):vb.localeCompare(va);
+  });
+
+  const fmt=d=>d?new Date(d).toLocaleDateString('fr-FR'):'—';
+  const rowsHtml = list.length===0
+    ? `<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:24px;">Aucun résultat</td></tr>`
+    : list.map((i,idx)=>{
+        const vName=getVehicleName(i.vehicleId);
+        return `<tr>
+          <td style="color:var(--muted);font-family:'DM Mono',monospace;font-size:11px;">${idx+1}</td>
+          <td><span style="font-weight:600;">${vName}</span></td>
+          <td><span style="font-size:11px;background:var(--surface2);padding:2px 7px;border-radius:10px;">${i.type||'—'}</span></td>
+          <td style="font-family:'DM Mono',monospace;font-size:11px;color:#e05a2b;">${i.simOld||'—'}</td>
+          <td style="font-family:'DM Mono',monospace;font-size:11px;color:#2ec97b;">${i.simNew||'—'}</td>
+          <td>${i.tech||'—'}</td>
+          <td style="color:var(--muted);font-size:11px;">${fmt(i.date)}</td>
+        </tr>`;
+      }).join('');
+
+  const sortClick=col=>`onclick="simSortBy('${col}')"`;
+  tableWrap.innerHTML = `<table class="sim-table">
+    <thead><tr>
+      <th>#</th>
+      <th class="sortable ${simSort.col==='vehicle'?(simSort.dir==='asc'?'sort-asc':'sort-desc'):''}" ${sortClick('vehicle')}>Véhicule<span class="sort-arrow"></span></th>
+      <th class="sortable ${simSort.col==='type'?(simSort.dir==='asc'?'sort-asc':'sort-desc'):''}" ${sortClick('type')}>Type<span class="sort-arrow"></span></th>
+      <th class="sortable ${simSort.col==='simOld'?(simSort.dir==='asc'?'sort-asc':'sort-desc'):''}" ${sortClick('simOld')}>Ancien SIM<span class="sort-arrow"></span></th>
+      <th class="sortable ${simSort.col==='simNew'?(simSort.dir==='asc'?'sort-asc':'sort-desc'):''}" ${sortClick('simNew')}>Nouveau SIM<span class="sort-arrow"></span></th>
+      <th class="sortable ${simSort.col==='tech'?(simSort.dir==='asc'?'sort-asc':'sort-desc'):''}" ${sortClick('tech')}>Technicien<span class="sort-arrow"></span></th>
+      <th class="sortable ${simSort.col==='date'?(simSort.dir==='asc'?'sort-asc':'sort-desc'):''}" ${sortClick('date')}>Date<span class="sort-arrow"></span></th>
+    </tr></thead>
+    <tbody>${rowsHtml}</tbody>
+  </table>`;
+
+  if(badge) badge.textContent = list.length + ' résultat' + (list.length!==1?'s':'');
 }
 
 function simSortBy(col){
   if(simSort.col===col) simSort.dir = simSort.dir==='asc'?'desc':'asc';
   else { simSort.col=col; simSort.dir='asc'; }
-  renderSIMTab();
+  renderSIMTable();
 }
 
 function getVehicleName(vid){
