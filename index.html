@@ -1365,31 +1365,11 @@ function boot(){
   checkFBConnection();
   setInterval(checkFBConnection, 10000);
 
-  _platformsCache = DEFAULT_PLATFORMS;
-
-  const sess = getSession();
-
-  // Si session valide → ne pas attendre Firebase, démarrer immédiatement
-  if(sess && sess.platform && !(sess.loginAt && (Date.now()-sess.loginAt) >= SESSION_MAX_MS)){
-    currentPlatform = sess.platform;
-    // Charger Firebase en parallèle (non bloquant)
-    FB.get('platforms').then(fbPlats=>{
-      if(fbPlats && fbPlats.length) _platformsCache = fbPlats;
-    }).catch(()=>{});
-    loadPlatformBases().then(()=> bootAfterPlatform());
-    return;
-  }
-
-  // Pas de session → charger plateformes puis afficher écran sélection
-  if(sess && sess.loginAt && (Date.now()-sess.loginAt) >= SESSION_MAX_MS) setSession(null);
-
   FB.get('platforms').then(fbPlats=>{
-    if(fbPlats && fbPlats.length) _platformsCache = fbPlats;
-    else FB.set('platforms', DEFAULT_PLATFORMS);
+    if(fbPlats && fbPlats.length) _platformsCache=fbPlats;
+    else { _platformsCache=DEFAULT_PLATFORMS; FB.set('platforms',DEFAULT_PLATFORMS); }
     renderPlatformScreen();
-  }).catch(()=>{
-    renderPlatformScreen();
-  });
+  }).catch(()=>{ _platformsCache=DEFAULT_PLATFORMS; renderPlatformScreen(); });
 }
 
 // ═══════════════════ SETUP (first admin) ═══════════════════
