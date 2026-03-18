@@ -2448,9 +2448,9 @@ async function bootAfterPlatform(){
     if(_sess.loginAt && (Date.now()-_sess.loginAt) >= SESSION_MAX_MS){
       setSession(null);
     } else {
-      // Utiliser la base de la session pour charger les bons users
-      const baseToLoad = (_sess.base && getBases().find(b=>b.id===_sess.base)) ? _sess.base : currentBase;
-      if(baseToLoad) currentBase = baseToLoad;
+      // Restaurer la base depuis la session directement
+      if(_sess.base) currentBase = _sess.base;
+      // Charger les users depuis Firebase
       const fbUsers = await FB.get(currentBase+'__users').catch(()=>null) || [];
       if(fbUsers.length) _usersCache = fbUsers;
       const u = getUsers().find(u=>u.email===_sess.email && userHasToken(u,_sess.tok) && u.status==='active');
@@ -2459,8 +2459,10 @@ async function bootAfterPlatform(){
         showApp();
         return;
       }
+      // Token invalide → aller au picker ou login
     }
   }
+  // Pas de session valide
   const stored = getSessions();
   if(stored.length>0){ renderAccountPicker(); document.getElementById('scrPick').classList.add('on'); return; }
   const users = getUsers();
