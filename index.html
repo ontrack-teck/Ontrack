@@ -419,17 +419,7 @@ tbody td{padding:11px 17px;font-size:12px;}
       <div style="background:var(--accent);color:#000;font-size:26px;font-weight:900;padding:6px 16px;border-radius:8px;display:inline-block;letter-spacing:1px;">ONTRACK</div>
       <div style="font-size:13px;color:var(--muted);margin-top:8px;font-weight:600;letter-spacing:2px;text-transform:uppercase;">Sélectionnez votre plateforme</div>
     </div>
-    <!-- Skeleton loader -->
-    <div id="platformSkeleton" style="display:flex;flex-direction:column;gap:14px;">
-      <div style="height:84px;border-radius:14px;background:linear-gradient(90deg,var(--surface2) 25%,var(--surface) 50%,var(--surface2) 75%);background-size:200% 100%;animation:shimmer 1.2s infinite;"></div>
-      <div style="height:84px;border-radius:14px;background:linear-gradient(90deg,var(--surface2) 25%,var(--surface) 50%,var(--surface2) 75%);background-size:200% 100%;animation:shimmer 1.2s infinite;animation-delay:.2s;"></div>
-    </div>
-    <!-- Cartes plateformes (remplies par JS) -->
-    <div id="platformCards" style="display:none;flex-direction:column;gap:14px;"></div>
-    <div id="platformRetry" style="display:none;margin-top:16px;">
-      <div style="color:var(--muted);font-size:12px;margin-bottom:10px;">⚠️ Connexion lente — vérifiez votre réseau</div>
-      <button onclick="retryBoot()" style="background:var(--accent);color:#000;border:none;padding:10px 24px;border-radius:8px;font-weight:700;cursor:pointer;">🔄 Réessayer</button>
-    </div>
+    <div id="platformCards" style="display:flex;flex-direction:column;gap:14px;"></div>
   </div>
 </div>
 
@@ -1344,60 +1334,15 @@ function showLogin(){
 }
 // ═══════════════════════════════════════════════════════
 
-function retryBoot(){
-  const sk = document.getElementById('platformSkeleton');
-  if(sk) sk.style.display='flex';
-  const cards = document.getElementById('platformCards');
-  if(cards){ cards.style.display='none'; cards.innerHTML=''; }
-  const retry = document.getElementById('platformRetry');
-  if(retry) retry.style.display='none';
-  boot();
-}
-
 function boot(){
   checkFBConnection();
   setInterval(checkFBConnection, 10000);
 
-  _platformsCache = DEFAULT_PLATFORMS;
-
-  // Si session active → passer directement sans attendre Firebase
-  const sess = getSession();
-  if(sess && sess.platform){
-    if(sess.loginAt && (Date.now()-sess.loginAt) >= SESSION_MAX_MS){
-      setSession(null);
-    } else {
-      currentPlatform = sess.platform;
-      const plat = getPlatforms().find(p=>p.id===currentPlatform);
-      if(plat){
-        document.getElementById('platformSel') && (document.getElementById('platformSel').value=currentPlatform);
-        FB.get('platforms').then(fbPlats=>{
-          if(fbPlats && fbPlats.length) _platformsCache=fbPlats;
-        }).catch(()=>{});
-        loadPlatformBases().then(()=>bootAfterPlatform());
-        return;
-      }
-    }
-  }
-
-  // Pas de session — afficher skeleton puis charger
-  document.getElementById('scrPlatform').classList.add('on');
-
-  // Timeout 5s : si Firebase lent → afficher quand même + bouton réessayer
-  const bootTimeout = setTimeout(()=>{
-    renderPlatformScreen();
-    const retry = document.getElementById('platformRetry');
-    if(retry) retry.style.display='block';
-  }, 5000);
-
   FB.get('platforms').then(fbPlats=>{
-    clearTimeout(bootTimeout);
     if(fbPlats && fbPlats.length) _platformsCache=fbPlats;
-    else FB.set('platforms', DEFAULT_PLATFORMS);
+    else { _platformsCache=DEFAULT_PLATFORMS; FB.set('platforms',DEFAULT_PLATFORMS); }
     renderPlatformScreen();
-  }).catch(()=>{
-    clearTimeout(bootTimeout);
-    renderPlatformScreen();
-  });
+  }).catch(()=>{ _platformsCache=DEFAULT_PLATFORMS; renderPlatformScreen(); });
 }
 
 // ═══════════════════ SETUP (first admin) ═══════════════════
@@ -2440,14 +2385,6 @@ function renderPlatformScreen(){
   const plats = getPlatforms();
   const el = document.getElementById('platformCards');
   if(!el) return;
-
-  // Cacher skeleton, afficher cartes
-  const sk = document.getElementById('platformSkeleton');
-  if(sk) sk.style.display='none';
-  const retry = document.getElementById('platformRetry');
-  if(retry) retry.style.display='none';
-  el.style.display='flex';
-
   el.innerHTML = plats.map(p => `
     <button onclick="selectPlatform('${p.id}')" style="
       display:flex;align-items:center;gap:18px;
@@ -2487,29 +2424,18 @@ function selectPlatform(id){
 
 function bootAfterPlatform(){
   const _sess = getSession();
-  // Session active → vérifier expiration absolue (8h)
   if(_sess && _sess.platform === currentPlatform){
     if(_sess.loginAt && (Date.now()-_sess.loginAt) >= SESSION_MAX_MS){
-      setSession(null); // Session expirée
+      setSession(null);
     } else {
       const u = getUsers().find(u=>u.email===_sess.email && userHasToken(u,_sess.tok));
-      if(u && u.status==='active'){
-        if(_sess.base && getBases().find(b=>b.id===_sess.base)){
-          currentBase = _sess.base;
-        }
-        currentUser={email:u.email,role:u.role};
-        showApp();
-        return;
-      }
+      if(u && u.status==='active'){ currentUser={email:u.email,role:u.role}; showApp(); return; }
     }
   }
-  // Comptes enregistrés → filtrer par plateforme courante uniquement
-  const stored = getSessions().filter(s => !s.platform || s.platform === currentPlatform);
+  const stored = getSessions();
   if(stored.length>0){ renderAccountPicker(); document.getElementById('scrPick').classList.add('on'); return; }
-  // Aucun user → setup
   const users = getUsers();
   if(!users.length){ document.getElementById('scrSetup').classList.add('on'); return; }
-  // Login classique
   document.getElementById('scrLogin').classList.add('on');
   startLockUI();
 }
