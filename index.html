@@ -1176,7 +1176,8 @@ function autoLogout(reason){
   stopPresence();
   const shell=document.getElementById('shell');
   if(shell) shell.classList.remove('on');
-  const stored=getSessions();
+  // Filtrer par plateforme courante
+  const stored=getSessions().filter(s=>!s.platform||s.platform===currentPlatform);
   if(stored.length>0){
     renderAccountPicker();
     const pk=document.getElementById('scrPick');
@@ -1186,7 +1187,6 @@ function autoLogout(reason){
     if(li) li.classList.add('on');
     startLockUI();
   }
-  // Afficher message selon la raison
   if(reason==='expired'){
     const err=document.getElementById('li_err')||document.getElementById('pk_msg');
     if(err){ err.textContent='⏱ Session expirée après 8h — reconnectez-vous.'; err.classList.add('on'); }
@@ -1264,21 +1264,31 @@ function pwStr(iid,bid,hid){
 // ═══════════════════ ACCOUNT PICKER ═══════════════════
 function renderAccountPicker(){
   const stored=getSessions();
+  const filtered=stored.filter(s=>!s.platform || s.platform===currentPlatform);
   const bases=getBases();
   const el=document.getElementById('accList');
   if(!el) return;
-  el.innerHTML=stored.map((s,i)=>{
+  if(!filtered.length){
+    // Pas de comptes pour cette plateforme → login direct
+    el.innerHTML='';
+    document.getElementById('scrPick').classList.remove('on');
+    document.getElementById('scrLogin').classList.add('on');
+    startLockUI();
+    return;
+  }
+  el.innerHTML=filtered.map((s,i)=>{
     const b=bases.find(x=>x.id===s.base)||{name:s.base||'ONTRACK',color:'#f0a500'};
     const initials=s.email.substring(0,2).toUpperCase();
-    const roleLabel=s.role==='admin'?'Administrateur':'Utilisateur';
-    return `<div class="acc-item" onclick="pickAccount(${i})">
+    const roleLabel=s.role==='admin'?'Administrateur':s.role==='superuser'?'Super User':s.role==='tech'?'Technicien':'Utilisateur';
+    const origIdx=stored.indexOf(s);
+    return `<div class="acc-item" onclick="pickAccount(${origIdx})">
       <div class="acc-avatar" style="background:${b.color}">${initials}</div>
       <div class="acc-info">
         <div class="acc-email">${s.email}</div>
         <div class="acc-role">${roleLabel}</div>
         <span class="acc-base" style="background:${b.color}22;color:${b.color}">${b.name}</span>
       </div>
-      <button class="acc-remove" onclick="event.stopPropagation();removeAccount(${i})" title="Retirer ce compte">✕</button>
+      <button class="acc-remove" onclick="event.stopPropagation();removeAccount(${origIdx})" title="Retirer ce compte">✕</button>
       <span class="acc-arrow">›</span>
     </div>`;
   }).join('');
@@ -1288,24 +1298,19 @@ async function pickAccount(i){
   const stored=getSessions();
   const s=stored[i];
   if(!s) return;
-  // Restaurer la base
   const bases=getBases();
   if(s.base&&bases.find(b=>b.id===s.base)) currentBase=s.base;
   initConfig();
-  // Charger les users depuis Firebase pour avoir les tokens à jour
   const fbUsers = await FB.get(bKey('users')) || [];
   _usersCache = fbUsers;
-  // Vérifier si le token est encore valide
   const u=fbUsers.find(u=>u.email===s.email&&userHasToken(u,s.tok)&&u.status==='active');
   if(u){
-    // Token valide → connexion directe
     currentUser={email:u.email,role:u.role};
     setSession({email:u.email,tok:s.tok,base:currentBase,platform:currentPlatform,loginAt:s.loginAt||Date.now()});
     document.getElementById('scrPick').classList.remove('on');
     loadBaseData();
     showApp();
   } else {
-    // Token expiré ou mdp changé → demander mdp
     document.getElementById('scrPick').classList.remove('on');
     document.getElementById('li_email').value=s.email;
     document.getElementById('scrLogin').classList.add('on');
@@ -2489,7 +2494,6 @@ function bootAfterPlatform(){
     } else {
       const u = getUsers().find(u=>u.email===_sess.email && userHasToken(u,_sess.tok));
       if(u && u.status==='active'){
-        // Restaurer la base sauvegardée
         if(_sess.base && getBases().find(b=>b.id===_sess.base)){
           currentBase = _sess.base;
         }
@@ -2499,8 +2503,8 @@ function bootAfterPlatform(){
       }
     }
   }
-  // Comptes enregistrés → picker
-  const stored = getSessions();
+  // Comptes enregistrés → filtrer par plateforme courante uniquement
+  const stored = getSessions().filter(s => !s.platform || s.platform === currentPlatform);
   if(stored.length>0){ renderAccountPicker(); document.getElementById('scrPick').classList.add('on'); return; }
   // Aucun user → setup
   const users = getUsers();
