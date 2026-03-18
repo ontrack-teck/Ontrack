@@ -1290,7 +1290,7 @@ async function pickAccount(i){
   if(u){
     // Token valide → connexion directe
     currentUser={email:u.email,role:u.role};
-    setSession({email:u.email,tok:s.tok,base:currentBase});
+    setSession({email:u.email,tok:s.tok,base:currentBase,platform:currentPlatform,loginAt:s.loginAt||Date.now()});
     document.getElementById('scrPick').classList.remove('on');
     loadBaseData();
     showApp();
@@ -1833,7 +1833,7 @@ async function chgEmail(){
   u.email=ne;setUsers(users);currentUser.email=ne;
   document.getElementById('apEm').textContent=(T().apEm||'')+' '+ne;
   document.getElementById('hUser').textContent=ne;
-  setSession({email:ne,tok:u.tok});
+  setSession({email:ne,tok:u.tok,base:currentBase,platform:currentPlatform,loginAt:getSession()?.loginAt||Date.now()});
   document.getElementById('apNe').value='';document.getElementById('apCpe').value='';
   msg.textContent=T().okEmail;msg.classList.add('ok');
 }
@@ -2455,7 +2455,15 @@ function bootAfterPlatform(){
       setSession(null); // Session expirée
     } else {
       const u = getUsers().find(u=>u.email===_sess.email && userHasToken(u,_sess.tok));
-      if(u && u.status==='active'){ currentUser={email:u.email,role:u.role}; showApp(); return; }
+      if(u && u.status==='active'){
+        // Restaurer la base sauvegardée
+        if(_sess.base && getBases().find(b=>b.id===_sess.base)){
+          currentBase = _sess.base;
+        }
+        currentUser={email:u.email,role:u.role};
+        showApp();
+        return;
+      }
     }
   }
   // Comptes enregistrés → picker
