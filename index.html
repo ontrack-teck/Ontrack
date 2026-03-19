@@ -2443,12 +2443,16 @@ function selectPlatform(id){
   if(sess){ sess.platform=id; setSession(sess); }
   // Masquer écran plateforme
   document.getElementById('scrPlatform').classList.remove('on');
-  // Charger les bases de la plateforme choisie
+  // Vider les données de l'ancienne plateforme immédiatement
+  data={vehicles:[],interventions:[]};
   _basesCache = null;
-  initConfig();
-  loadBaseData();
-  // Continuer le flow normal de boot
-  bootAfterPlatform();
+  _usersCache = null;
+  _cfgCache = null;
+  // Vider l'affichage
+  const fc = document.getElementById('fleetC');
+  if(fc) fc.innerHTML = '';
+  // Charger les bases de la nouvelle plateforme puis continuer
+  loadPlatformBases().then(()=> bootAfterPlatform());
 }
 
 async function bootAfterPlatform(){
