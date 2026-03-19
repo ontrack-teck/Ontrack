@@ -1893,9 +1893,9 @@ function loadBaseData(skipRender){
   data={vehicles:[],interventions:[]};
   _usersCache=null;
   _cfgCache=null;
-  // 1) Affichage instantané depuis cache sessionStorage
+  // Clé de cache incluant la plateforme pour éviter les mélanges
   const fleetPath = bKey('fleet');
-  const cacheKey = 'ot_cache_' + fleetPath;
+  const cacheKey = 'ot_cache_' + currentPlatform + '_' + fleetPath;
   const cached = sessionStorage.getItem(cacheKey);
   if(cached){
     try{
@@ -1916,7 +1916,6 @@ function loadBaseData(skipRender){
     const interventions = FB._normalize(fbData?.interventions || []);
     data = {vehicles, interventions};
     FB._lastVal[fleetPath] = JSON.stringify({vehicles, interventions});
-    // Mettre à jour le cache sessionStorage
     sessionStorage.setItem(cacheKey, JSON.stringify({vehicles, interventions}));
     render();
   });
@@ -1934,7 +1933,7 @@ function loadBaseData(skipRender){
     const newStr = JSON.stringify(normalized);
     if(newStr === FB._lastVal[path]) return;
     FB._lastVal[path] = newStr;
-    sessionStorage.setItem(cacheKey, JSON.stringify(normalized));
+    sessionStorage.setItem('ot_cache_'+currentPlatform+'_'+path, JSON.stringify(normalized));
     const prevSelVid = selVid;
     const prevYear = curYear;
     data = normalized;
@@ -1975,7 +1974,7 @@ const saveD=async ()=>{
   FB.lockWrite(path);
   FB._lastVal[path] = JSON.stringify(snapshot);
   // Mettre à jour le cache sessionStorage immédiatement
-  sessionStorage.setItem('ot_cache_'+path, JSON.stringify(snapshot));
+  sessionStorage.setItem('ot_cache_'+currentPlatform+'_'+path, JSON.stringify(snapshot));
   await FB.set(path, snapshot);
 };
 const validEmail=e=>/^[^@]+@[^@]+\.[^@]+$/.test(e);
