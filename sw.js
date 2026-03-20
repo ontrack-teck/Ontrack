@@ -6,11 +6,12 @@ self.addEventListener('install', e => {
 });
 
 self.addEventListener('activate', e => {
-  // Supprimer tous les anciens caches
+  // Supprimer les anciens caches sans forcer le rechargement des pages
   e.waitUntil(
     caches.keys().then(keys => 
       Promise.all(keys.map(key => caches.delete(key)))
-    ).then(() => self.clients.claim())
+    )
+    // Ne PAS appeler clients.claim() pour éviter de recharger la page
   );
 });
 

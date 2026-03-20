@@ -1364,9 +1364,11 @@ function showLogin(){
 }
 // ═══════════════════════════════════════════════════════
 
+let _fbConnInterval = null;
 function boot(){
   checkFBConnection();
-  setInterval(checkFBConnection, 10000);
+  if(_fbConnInterval) clearInterval(_fbConnInterval);
+  _fbConnInterval = setInterval(checkFBConnection, 10000);
 
   FB.get('platforms').then(fbPlats=>{
     if(fbPlats && fbPlats.length) _platformsCache=fbPlats;
@@ -2293,6 +2295,17 @@ async function initPush(){
 
   try {
     const reg = await navigator.serviceWorker.register('/Ontrack/sw.js');
+
+    // Éviter que la mise à jour du SW force un reload de la page
+    reg.addEventListener('updatefound', () => {
+      const newWorker = reg.installing;
+      if(newWorker){
+        newWorker.addEventListener('statechange', () => {
+          // Ne pas recharger automatiquement
+        });
+      }
+    });
+
     await navigator.serviceWorker.ready;
 
     // Vérifier permission
@@ -2317,7 +2330,6 @@ async function initPush(){
     };
     const deviceKey = 'push_' + btoa(sub.endpoint).slice(-20).replace(/[^a-z0-9]/gi,'');
     await FB.set('push__subscriptions/' + deviceKey, subData);
-    console.log('Push: abonnement enregistré');
   } catch(e) {
     console.warn('Push init error:', e.message);
   }
@@ -2397,10 +2409,14 @@ async function checkPendingPush(){
   if(myNotifs.length > 0) _lastPushCheck = Date.now();
 }
 
+let _pushPollInterval = null;
+let _pushBCListener = null;
 function startPushPolling(){
+  // Éviter les doublons
+  if(_pushPollInterval) clearInterval(_pushPollInterval);
   startPushListener();
   initPush();
-  setInterval(checkPendingPush, 15000); // vérifier toutes les 15s
+  _pushPollInterval = setInterval(checkPendingPush, 15000);
 }
 
 // ═══════════════════ PLATFORM SELECTION SCREEN ═══════════════════
