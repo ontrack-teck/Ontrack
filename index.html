@@ -1099,12 +1099,15 @@ const SESSION_MAX_MS = 8 * 60 * 60 * 1000; // 8h max même si actif
 function addSession(sess){
   const sessions=getSessions();
   const idx=sessions.findIndex(s=>s.email===sess.email);
-  const entry={email:sess.email,tok:sess.tok,base:sess.base||currentBase,role:currentUser?.role||'user',loginAt:Date.now()};
+  // Conserver le loginAt existant si déjà présent, sinon créer un nouveau
+  const existingLoginAt = idx>=0 ? sessions[idx].loginAt : null;
+  const cur=getSession();
+  const loginAt = cur?.loginAt || existingLoginAt || Date.now();
+  const entry={email:sess.email,tok:sess.tok,base:sess.base||currentBase,role:currentUser?.role||'user',loginAt};
   if(idx>=0) sessions[idx]=entry; else sessions.push(entry);
   setSessions(sessions);
-  // Horodater aussi la session courante
-  const cur=getSession();
-  if(cur){ cur.loginAt=Date.now(); setSession(cur); }
+  // S'assurer que la session courante a bien le bon loginAt (sans le réinitialiser)
+  if(cur && !cur.loginAt){ cur.loginAt=loginAt; setSession(cur); }
 }
 function removeStoredSession(email){
   setSessions(getSessions().filter(s=>s.email!==email));
@@ -1390,7 +1393,7 @@ async function doSetup(){
   const adminUser={email:em,h:await hash(pw),role:'admin',status:'active',tok};
   setUserToken(adminUser, DEVICE_ID, tok);
   setUsers([adminUser]);
-  setSession({email:em,tok,base:currentBase,platform:currentPlatform});
+  setSession({email:em,tok,base:currentBase,platform:currentPlatform,loginAt:Date.now()});
   currentUser={email:em,role:'admin'};
   addSession({email:em,tok,base:currentBase});
   document.getElementById('scrSetup').classList.remove('on');
@@ -1424,7 +1427,7 @@ async function doFirstLogin(){
       await FB.set(b.id+'__users',bUsers);
     }
   });
-  setSession({email:em,tok,base:currentBase,platform:currentPlatform});
+  setSession({email:em,tok,base:currentBase,platform:currentPlatform,loginAt:Date.now()});
   currentUser={email:em,role:'user'};
   addSession({email:em,tok,base:currentBase});
   document.getElementById('scrFirst').classList.remove('on');
@@ -1503,7 +1506,8 @@ async function doLogin(){
   const loginUser=allUsers.find(x=>x.email===em);
   setUserToken(loginUser, DEVICE_ID, tok);
   setUsers(allUsers);
-  setSession({email:em,tok,base:currentBase,platform:currentPlatform});
+  const _loginAt = Date.now();
+  setSession({email:em,tok,base:currentBase,platform:currentPlatform,loginAt:_loginAt});
   currentUser={email:em,role:u.role};
   addSession({email:em,tok,base:currentBase});
   document.getElementById('scrLogin').classList.remove('on');
