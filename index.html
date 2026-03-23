@@ -1329,7 +1329,7 @@ async function pickAccount(i){
   const u=fbUsers.find(u=>u.email===s.email&&userHasToken(u,s.tok)&&u.status==='active');
   if(u){
     currentUser={email:u.email,role:u.role};
-    setSession({email:u.email,tok:s.tok,base:currentBase,platform:currentPlatform,loginAt:s.loginAt||Date.now()});
+    setSession({email:u.email,tok:s.tok,base:currentBase,platform:currentPlatform,loginAt:Date.now()});
     document.getElementById('scrPick').classList.remove('on');
     loadBaseData();
     showApp();
@@ -2487,6 +2487,9 @@ async function bootAfterPlatform(){
       const u = getUsers().find(u=>u.email===_sess.email && userHasToken(u,_sess.tok) && u.status==='active');
       if(u){
         currentUser={email:u.email,role:u.role};
+        // Rafraîchir loginAt pour que la session de 8h reparte de maintenant
+        _sess.loginAt = Date.now();
+        setSession(_sess);
         showApp();
         return;
       }
