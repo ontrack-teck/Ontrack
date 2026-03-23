@@ -1384,16 +1384,54 @@ function showLogin(){
 // ═══════════════════════════════════════════════════════
 
 let _fbConnInterval = null;
-function boot(){
+async function boot(){
   checkFBConnection();
   if(_fbConnInterval) clearInterval(_fbConnInterval);
   _fbConnInterval = setInterval(checkFBConnection, 10000);
 
-  FB.get('platforms').then(fbPlats=>{
+  // Charger les plateformes
+  try{
+    const fbPlats = await FB.get('platforms');
     if(fbPlats && fbPlats.length) _platformsCache=fbPlats;
     else { _platformsCache=DEFAULT_PLATFORMS; FB.set('platforms',DEFAULT_PLATFORMS); }
-    renderPlatformScreen();
-  }).catch(()=>{ _platformsCache=DEFAULT_PLATFORMS; renderPlatformScreen(); });
+  } catch(e){ _platformsCache=DEFAULT_PLATFORMS; }
+
+  // ── Vérifier si une session active existe ──────────────────────────
+  const sess = getSession();
+  if(sess && sess.platform && sess.email && sess.tok){
+    // Vérifier expiration 8h
+    if(sess.loginAt && (Date.now()-sess.loginAt) >= SESSION_MAX_MS){
+      setSession(null);
+    } else {
+      // Session valide → restaurer directement sans passer par l'écran plateforme
+      currentPlatform = sess.platform;
+      try{
+        const fbBases = await FB.get(currentPlatform+'__bases');
+        if(fbBases && fbBases.length){ _basesCache=fbBases; }
+        else { _basesCache=[{id:'SGO',name:'SGO',color:'#f0a500'}]; }
+      } catch(e){ _basesCache=[{id:'SGO',name:'SGO',color:'#f0a500'}]; }
+      if(sess.base && _basesCache.find(b=>b.id===sess.base)) currentBase=sess.base;
+      else if(_basesCache.length) currentBase=_basesCache[0].id;
+      renderBaseBar();
+      renderPlatformBar();
+      try{
+        const fbUsers = await FB.get(uKey());
+        if(fbUsers && Array.isArray(fbUsers) && fbUsers.length) _usersCache=fbUsers;
+      } catch(e){}
+      const u = getUsers().find(u=>u.email===sess.email && userHasToken(u,sess.tok) && u.status==='active');
+      if(u){
+        currentUser={email:u.email,role:u.role};
+        // Rafraîchir loginAt
+        sess.loginAt = Date.now();
+        setSession(sess);
+        loadBaseData();
+        showApp();
+        return; // ← sortir sans passer par l'écran plateforme
+      }
+    }
+  }
+  // ── Pas de session → afficher l'écran plateforme normalement ───────
+  renderPlatformScreen();
 }
 
 // ═══════════════════ SETUP (first admin) ═══════════════════
