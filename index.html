@@ -1424,6 +1424,9 @@ async function boot(){
         // Rafraîchir loginAt
         sess.loginAt = Date.now();
         setSession(sess);
+        // Masquer l'écran plateforme avant de montrer l'app
+        const spEl = document.getElementById('scrPlatform');
+        if(spEl) spEl.classList.remove('on');
         loadBaseData();
         showApp();
         return; // ← sortir sans passer par l'écran plateforme
@@ -2498,6 +2501,9 @@ function goToPlatformScreen(){
 
 function renderPlatformScreen(){
   const plats = getPlatforms();
+  // S'assurer que l'écran est visible
+  const scrEl = document.getElementById('scrPlatform');
+  if(scrEl) scrEl.classList.add('on');
   const el = document.getElementById('platformCards');
   if(!el) return;
   el.innerHTML = plats.map(p => `
