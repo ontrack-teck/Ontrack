@@ -1331,8 +1331,8 @@ async function pickAccount(i){
     currentUser={email:u.email,role:u.role};
     setSession({email:u.email,tok:s.tok,base:currentBase,platform:currentPlatform,loginAt:Date.now()});
     document.getElementById('scrPick').classList.remove('on');
-    loadBaseData();
     showApp();
+    loadBaseData();
   } else {
     document.getElementById('scrPick').classList.remove('on');
     document.getElementById('li_email').value=s.email;
@@ -1398,6 +1398,7 @@ async function doSetup(){
   addSession({email:em,tok,base:currentBase});
   document.getElementById('scrSetup').classList.remove('on');
   showApp();
+  loadBaseData();
 }
 
 // ═══════════════════ FIRST LOGIN (pending user sets password) ═══════════════════
@@ -1432,6 +1433,7 @@ async function doFirstLogin(){
   addSession({email:em,tok,base:currentBase});
   document.getElementById('scrFirst').classList.remove('on');
   showApp();
+  loadBaseData();
 }
 
 // ═══════════════════ LOGIN ═══════════════════
@@ -1512,6 +1514,7 @@ async function doLogin(){
   addSession({email:em,tok,base:currentBase});
   document.getElementById('scrLogin').classList.remove('on');
   showApp();
+  loadBaseData(); // charger les véhicules + monter le listener FB.on(users)
   // Notification connexion (après showApp pour avoir les abonnements chargés)
   setTimeout(()=>{
     sendPushToAdmins(
@@ -2490,6 +2493,7 @@ async function bootAfterPlatform(){
         // Rafraîchir loginAt pour que la session de 8h reparte de maintenant
         _sess.loginAt = Date.now();
         setSession(_sess);
+        loadBaseData(); // ← INDISPENSABLE : charge les véhicules + monte le listener FB.on(users)
         showApp();
         return;
       }
