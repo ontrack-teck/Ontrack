@@ -1630,6 +1630,11 @@ function showApp(){
   renderBaseBar();
   const _bases=getBases();const _cb=_bases.find(b=>b.id===currentBase);const _ls=document.getElementById('baseLogo');if(_ls&&_cb)_ls.textContent=_cb.name;
   applyT();populateSels();render();
+  // Restaurer l'onglet actif sauvegardé
+  const savedTab = localStorage.getItem('sgo_tab');
+  if(savedTab && ['flotte','interventions','bilan','performance','sim'].includes(savedTab)){
+    switchTab(savedTab);
+  }
 }
 
 // ═══════════════════ PRESENCE ═══════════════════
@@ -2943,6 +2948,7 @@ function populateSels(){
 
 function switchTab(tab){
   curTab=tab;
+  localStorage.setItem('sgo_tab', tab); // Sauvegarder l'onglet actif
   document.querySelectorAll('.tbtn').forEach((b,i)=>b.classList.toggle('active',['flotte','interventions','bilan','performance','sim'][i]===tab));
   document.querySelectorAll('.tp').forEach(p=>p.classList.remove('active'));
   document.getElementById('tab-'+tab).classList.add('active');
