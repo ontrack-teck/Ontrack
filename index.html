@@ -815,6 +815,12 @@ tbody td{padding:11px 17px;font-size:12px;}
       <div class="aps">
         <div class="apst" id="apSUL">Utilisateurs enregistrés</div>
         <div id="uList" class="ulist"></div>
+        <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);">
+          <button class="apsave" onclick="recoverUsersFromOtherBase()" style="background:var(--surface2);color:var(--blue);border:1px solid var(--blue);font-size:12px;padding:7px 14px;">
+            🔄 Récupérer les utilisateurs depuis une autre base
+          </button>
+          <div class="apmsg" id="recoverMsg" style="margin-top:8px;"></div>
+        </div>
       </div>
     </div>
     <!-- CONFIG PANE -->
@@ -1053,11 +1059,21 @@ const setPlatforms=async p=>{ _platformsCache=p; await FB.set('platforms',p); };
 
 // ── Per-base storage helpers ──────────────────────────
 const bKey=k=>`${currentBase}__${k}`;
+const uKey=()=>`${currentPlatform}__users`;
 let _usersCache = null;
 const getUsers=()=>_usersCache||[];
 const setUsers=async u=>{
+  // Garde-fou : ne jamais écraser Firebase avec un tableau vide accidentel
+  if(!u || u.length === 0){
+    // Vérifier s'il y a déjà des users dans Firebase avant d'écraser
+    const existing = await FB.get(uKey()).catch(()=>null);
+    if(existing && Array.isArray(existing) && existing.length > 0){
+      console.warn("[ONTRACK] setUsers: tentative d ecraser avec tableau vide bloquee.");
+      return; // Ne pas écraser
+    }
+  }
   _usersCache=u;
-  const path=bKey('users');
+  const path=uKey();
   FB.lockWrite(path);
   try{ await FB.set(path,u); }finally{ FB.unlockWrite(path); }
 };
@@ -1324,7 +1340,7 @@ async function pickAccount(i){
   const bases=getBases();
   if(s.base&&bases.find(b=>b.id===s.base)) currentBase=s.base;
   initConfig();
-  const fbUsers = await FB.get(bKey('users')) || [];
+  const fbUsers = await FB.get(uKey()) || [];
   _usersCache = fbUsers;
   const u=fbUsers.find(u=>u.email===s.email&&userHasToken(u,s.tok)&&u.status==='active');
   if(u){
@@ -1416,18 +1432,7 @@ async function doFirstLogin(){
   const pwHash=await hash(pw);
   u.h=pwHash;u.status='active';
   setUserToken(u, DEVICE_ID, tok);
-  setUsers(users);
-  const allBases=getBases();
-  allBases.forEach(async b=>{
-    if(b.id===currentBase) return;
-    const bUsers=await FB.get(b.id+'__users')||[];
-    const bu=bUsers.find(x=>x.email===em);
-    if(bu && bu.status==='pending'){
-      bu.h=pwHash;
-      bu.status='active';
-      await FB.set(b.id+'__users',bUsers);
-    }
-  });
+  setUsers(users); // uKey() = store partagé → une seule écriture suffit
   setSession({email:em,tok,base:currentBase,platform:currentPlatform,loginAt:Date.now()});
   currentUser={email:em,role:'user'};
   addSession({email:em,tok,base:currentBase});
@@ -1480,29 +1485,13 @@ async function doLogin(){
     const idx = allUsers.findIndex(x=>x.email===em);
     if(idx>=0) allUsers[idx].h = newHash;
     setUsers(allUsers);
-    await FB.set(currentBase+'__users', allUsers);
-    // Migrer aussi les autres bases
-    const allBases2=getBases();
-    allBases2.forEach(async b=>{
-      if(b.id===currentBase) return;
-      const bUsers=await FB.get(b.id+'__users')||[];
-      const bu=bUsers.find(x=>x.email===em);
-      if(bu&&bu.h===legacyHash){ bu.h=newHash; await FB.set(b.id+'__users',bUsers); }
-    });
+    await FB.set(uKey(), allUsers);
+    // Migration: le store users est partagé (uKey) — setUsers() suffit
   }
-
-  // Sync le hash vers toutes les bases où l'user est encore en attente
-  const allBases2=getBases();
-  allBases2.forEach(async b=>{
-    if(b.id===currentBase) return;
-    const bUsers=await FB.get(b.id+'__users')||[];
-    const bu=bUsers.find(x=>x.email===em);
-    if(bu&&bu.status==='pending'){
-      bu.h=u.h;
-      bu.status='active';
-      await FB.set(b.id+'__users',bUsers);
-    }
-  });
+  // Sync pending: le store users est partagé (uKey) — une seule écriture suffit
+  const sharedUsers=getUsers();
+  const pendingU=sharedUsers.find(x=>x.email===em&&x.status==='pending');
+  if(pendingU){ pendingU.h=u.h; pendingU.status='active'; await setUsers(sharedUsers); }
   const tok=uid();
   const allUsers=getUsers();
   const loginUser=allUsers.find(x=>x.email===em);
@@ -1747,10 +1736,10 @@ function addUser(){ if(!canDo('manageUsers')){alert('Accès refusé.');return;}
   const allBases=getBases();
   allBases.forEach(async b=>{
     if(b.id===currentBase) return;
-    const bUsers=await FB.get(b.id+'__users')||[];
+    const bUsers=await FB.get(uKey())||[];
     if(!bUsers.find(u=>u.email===em)){
       bUsers.push({email:em,h:null,role:newRole,status:'pending',tok:null});
-      await FB.set(b.id+'__users',bUsers);
+      await FB.set(uKey(),bUsers);
     }
   });
   document.getElementById('apUemail').value='';
@@ -1776,30 +1765,31 @@ function toggleBlock(em){
   renderUserList();
 }
 
-function removeUser(em){
+async function removeUser(em){
   if(!confirm(T().confirmDelUser.replace('{email}',em)))return;
   // Supprimer de toutes les bases via Firebase
-  const allBases=getBases();
-  allBases.forEach(async b=>{
-    const bUsers=await FB.get(b.id+'__users')||[];
-    const filtered=bUsers.filter(u=>u.email!==em);
-    await FB.set(b.id+'__users',filtered);
-    if(b.id===currentBase) _usersCache=filtered;
-  });
+  // uKey() = store partagé → une seule suppression
+  const allU=getUsers().filter(u=>u.email!==em);
+  _usersCache=allU;
+  await FB.set(uKey(),allU);
   renderUserList();
 }
 
-function renderUserList(){
+async function renderUserList(){
   const L=T();
-  // Afficher le nom de la base dans le titre
   const titleEl=document.getElementById('apSUL');
   if(titleEl){
     const bases=getBases();const b=bases.find(x=>x.id===currentBase);
     titleEl.textContent=(L.apSUL||'Utilisateurs')+' — '+(b?b.name:currentBase);
   }
-  const users=getUsers().filter(u=>u.email!==currentUser.email);
   const container=document.getElementById('uList');
-  if(!users.length){container.innerHTML=`<div style="color:var(--muted);font-size:13px;padding:8px 0">${L.noUsers}</div>`;return;}
+  if(!container) return;
+  // Recharger depuis Firebase pour avoir les données fraîches
+  container.innerHTML=`<div style="color:var(--muted);font-size:12px;padding:8px 0">⏳ Chargement…</div>`;
+  const fresh = await FB.get(uKey()).catch(()=>null);
+  if(fresh && Array.isArray(fresh) && fresh.length) _usersCache = fresh;
+  const users=getUsers().filter(u=>u.email!==currentUser.email);
+  if(!users.length){container.innerHTML=`<div style="color:var(--muted);font-size:13px;padding:8px 0">${L.noUsers||'Aucun utilisateur'}</div>`;return;}
   container.innerHTML=users.map(u=>`
     <div class="uitem">
       <div class="uitem-info">
@@ -1820,6 +1810,48 @@ function renderUserList(){
       </div>
     </div>`).join('');
 }
+
+// ═══════════════════ RÉCUPÉRATION UTILISATEURS ═══════════════════
+async function recoverUsersFromOtherBase(){
+  const msg = document.getElementById('recoverMsg');
+  if(msg){ msg.textContent='⏳ Recherche dans les autres bases…'; msg.className='apmsg'; }
+  const bases = getBases();
+  let bestSource = null;
+  let bestUsers = [];
+  // Chercher la base avec le plus d'utilisateurs
+  for(const b of bases){
+    if(b.id === currentBase) continue;
+    const bUsers = await FB.get(uKey()).catch(()=>null); // ZA__users est partagé
+    if(bUsers && Array.isArray(bUsers) && bUsers.length > bestUsers.length){
+      bestUsers = bUsers;
+      bestSource = b;
+    }
+  }
+  // Si ZA__users est lui-même vide, chercher dans les anciens chemins par base (SGO__users, etc.)
+  if(!bestUsers.length){
+    for(const b of bases){
+      const bUsers = await FB.get(b.id+'__users').catch(()=>null);
+      if(bUsers && Array.isArray(bUsers) && bUsers.length > bestUsers.length){
+        bestUsers = bUsers;
+        bestSource = b;
+      }
+    }
+  }
+  if(!bestUsers.length){
+    if(msg){ msg.textContent='❌ Aucune base source trouvée avec des utilisateurs.'; msg.className='apmsg err'; }
+    return;
+  }
+  // Écrire directement dans Firebase sans passer par le garde-fou setUsers
+  _usersCache = bestUsers;
+  await FB.set(uKey(), bestUsers);
+  if(msg){
+    msg.textContent=`✅ ${bestUsers.length} utilisateur(s) récupérés ! La liste est restaurée.`;
+    msg.className='apmsg ok';
+    setTimeout(()=>{ msg.textContent=''; msg.className='apmsg'; }, 4000);
+  }
+  renderUserList();
+}
+// ══════════════════════════════════════════════════════════════════
 
 function changeRole(email, newRole){
   if(!canDo('manageUsers')){alert('Accès refusé.');return;}
@@ -1862,14 +1894,7 @@ async function chgPw(){
   if(np!==cp){msg.textContent=T().errMatch;msg.classList.add('err');return;}
   const newHash=await hash(np);
   u.h=newHash;
-  setUsers(users);
-  const allBases=getBases();
-  allBases.forEach(async b=>{
-    if(b.id===currentBase) return;
-    const bUsers=await FB.get(b.id+'__users')||[];
-    const bu=bUsers.find(x=>x.email===currentUser.email);
-    if(bu){ bu.h=newHash; await FB.set(b.id+'__users',bUsers); }
-  });
+  setUsers(users); // uKey() = store partagé → une seule écriture suffit
   ['apOp','apNp','apCp'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('apPwB').style.cssText='';document.getElementById('apPwH').textContent='';
   msg.textContent=T().okPw;msg.classList.add('ok');
@@ -1950,8 +1975,8 @@ function loadBaseData(skipRender){
     curYear = prevYear;
     render();
   }, 30000);
-  FB.off(bKey('users'));
-  FB.on(bKey('users'), fbUsers => {
+  FB.off(uKey());
+  FB.on(uKey(), fbUsers => {
     if(fbUsers){
       _usersCache = fbUsers;
       // Pas d'écriture localStorage
@@ -2485,7 +2510,7 @@ async function bootAfterPlatform(){
       setSession(null);
     } else {
       if(_sess.base) currentBase = _sess.base;
-      const fbUsers = await FB.get(currentBase+'__users').catch(()=>null) || [];
+      const fbUsers = await FB.get(uKey()).catch(()=>null) || [];
       if(fbUsers.length) _usersCache = fbUsers;
       const u = getUsers().find(u=>u.email===_sess.email && userHasToken(u,_sess.tok) && u.status==='active');
       if(u){
@@ -2533,6 +2558,8 @@ async function loadPlatformBases(){
   if(!_basesCache.find(b=>b.id===currentBase)){
     currentBase=_basesCache[0].id;
   }
+  // Migration one-shot : consolider les anciens stores par base → store partagé plateforme
+  await migrateUsersToSharedStore();
   renderBaseBar();
   renderSB();
 }
@@ -2540,6 +2567,34 @@ async function loadPlatformBases(){
 async function ensureAdminInBase(baseId){
   // Fonction désactivée — trop risquée, cause des pertes d'utilisateurs
   return;
+}
+
+// ══════════════════════════════════════════════════════
+// MIGRATION : consolider les anciens SGO__users / KHOURY__users → ZA__users (uKey)
+// S'exécute une seule fois au boot si ZA__users est vide
+// ══════════════════════════════════════════════════════
+async function migrateUsersToSharedStore(){
+  const sharedKey = uKey(); // ex: ZA__users
+  const existing = await FB.get(sharedKey).catch(()=>null);
+  if(existing && existing.length > 0) return; // déjà migré, rien à faire
+  // Collecter tous les users de toutes les bases
+  const bases = _basesCache || [];
+  const merged = {};
+  for(const b of bases){
+    const bUsers = await FB.get(b.id+'__users').catch(()=>null) || [];
+    for(const u of bUsers){
+      if(!u || !u.email) continue;
+      // Garder la version la plus complète (avec hash)
+      if(!merged[u.email] || (u.h && !merged[u.email].h)){
+        merged[u.email] = u;
+      }
+    }
+  }
+  const users = Object.values(merged);
+  if(users.length > 0){
+    await FB.set(sharedKey, users);
+    console.log('[ONTRACK] Migration users → '+sharedKey+' : '+users.length+' utilisateurs consolidés');
+  }
 }
 
 function renderPlatformBar(){
@@ -2564,7 +2619,7 @@ async function switchPlatform(id){
   if(id===currentPlatform) return;
   // Quitter présence de l'ancienne plateforme/base
   await stopPresence();
-  try{ FB.off(bKey('fleet')); FB.off(bKey('users')); FB.off(bKey('config')); }catch(e){}
+  try{ FB.off(bKey('fleet')); FB.off(uKey()); FB.off(bKey('config')); }catch(e){}
   _usersCache=null; _cfgCache=null; _basesCache=null;
   // Arrêter tous les polls
   Object.keys(FB._polls).forEach(p=>{ clearInterval(FB._polls[p]); delete FB._polls[p]; });
@@ -2642,7 +2697,7 @@ document.addEventListener('click', e=>{
 function switchBase(id){
   if(id==='__add__'){openBM();renderBaseBar();return;}
   // Arrêter l'écoute de l'ancienne base
-  try{ FB.off(bKey('fleet')); FB.off(bKey('users')); FB.off(bKey('config')); }catch(e){}
+  try{ FB.off(bKey('fleet')); FB.off(uKey()); FB.off(bKey('config')); }catch(e){}
   _usersCache=null; _cfgCache=null;
   if(id===currentBase)return;
   currentBase=id;
@@ -2719,7 +2774,7 @@ function addBase(){
   // Copier les users de la base courante vers la nouvelle base (via Firebase)
   const srcUsers=getUsers();
   const newUsers=srcUsers.map(u=>({...u, tok:null, status: u.status==='blocked' ? 'active' : u.status}));
-  FB.set(id+'__users', newUsers);
+  // Les utilisateurs sont partagés au niveau plateforme (uKey) — pas besoin de copier par base
   // Config par défaut pour la nouvelle base
   FB.set(id+'__config',{rate:655.957,itypes:DEFAULT_ITYPES,vtypes:{fr:DEFAULT_VTYPES_FR,en:DEFAULT_VTYPES_EN}});
   document.getElementById('newBaseName').value='';
@@ -2774,7 +2829,7 @@ function initConfig(){
   // ── Migration legacy : si des données existent encore en localStorage, les migrer vers Firebase ──
   try{
     const legacyFleet=localStorage.getItem(bKey('fleet'));
-    const legacyUsers=localStorage.getItem(bKey('users'));
+    const legacyUsers=localStorage.getItem(uKey());
     const legacyCfg=localStorage.getItem(bKey('config'));
     if(legacyFleet){
       const parsed=JSON.parse(legacyFleet);
@@ -2783,8 +2838,8 @@ function initConfig(){
     }
     if(legacyUsers){
       const parsed=JSON.parse(legacyUsers);
-      if(parsed?.length){ FB.set(bKey('users'),parsed); console.log('[ONTRACK] Migration users localStorage → Firebase ✓'); }
-      localStorage.removeItem(bKey('users'));
+      if(parsed?.length){ FB.set(uKey(),parsed); console.log('[ONTRACK] Migration users localStorage → Firebase ✓'); }
+      localStorage.removeItem(uKey());
     }
     if(legacyCfg){
       const parsed=JSON.parse(legacyCfg);
