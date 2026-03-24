@@ -1383,9 +1383,13 @@ function removeAccount(i){
   }
 }
 
-function showLogin(){
+async function showLogin(){
   document.getElementById('scrPick').classList.remove('on');
-  // Vérifier s'il y a des utilisateurs → sinon setup
+  // Charger les users depuis Firebase si cache vide (ex: après refresh)
+  if(!_usersCache || !_usersCache.length){
+    const fbUsers = await FB.get(uKey()).catch(()=>null);
+    if(fbUsers && Array.isArray(fbUsers) && fbUsers.length) _usersCache = fbUsers;
+  }
   const users=getUsers();
   if(!users.length){
     document.getElementById('scrSetup').classList.add('on');
