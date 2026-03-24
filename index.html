@@ -2594,6 +2594,12 @@ async function bootAfterPlatform(){
   }
   const stored = getSessions();
   if(stored.length>0){ renderAccountPicker(); document.getElementById('scrPick').classList.add('on'); return; }
+  // Charger les users depuis Firebase AVANT de décider quel écran afficher
+  // Sinon _usersCache est null → getUsers() retourne [] → écran setup affiché à tort
+  if(!_usersCache || !_usersCache.length){
+    const fbUsers = await FB.get(uKey()).catch(()=>null);
+    if(fbUsers && Array.isArray(fbUsers) && fbUsers.length) _usersCache = fbUsers;
+  }
   const users = getUsers();
   if(!users.length){ document.getElementById('scrSetup').classList.add('on'); return; }
   document.getElementById('scrLogin').classList.add('on');
