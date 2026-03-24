@@ -1676,11 +1676,34 @@ async function doLogin(){
   try{
     await fbSignIn(em, pw);
   } catch(e){
-    if(btn){btn.disabled=false;btn.textContent=T().btnLogin||'Connexion';}
-    const na=lo.n+1;
-    if(na>=MAX_FAIL){setLock({n:na,until:Date.now()+LOCK_MS});startLockUI();err.textContent=T().errLocked;}
-    else{setLock({n:na,until:0});err.textContent=T().errFail(MAX_FAIL-na);}
-    err.classList.add('on');return;
+    // Si le compte n'existe pas encore dans Firebase Auth → migration automatique
+    // On vérifie d'abord le mot de passe avec l'ancien hash SHA-256
+    if(e.message === 'EMAIL_NOT_FOUND' || e.message === 'INVALID_LOGIN_CREDENTIALS'){
+      const checkHash = await hash(pw);
+      const legacyCheck = hashLegacy(pw);
+      const uCheck = users.find(x=>x.email===em && x.status==='active' && (x.h===checkHash || x.h===legacyCheck));
+      if(uCheck){
+        // Mot de passe correct → créer le compte Firebase Auth automatiquement
+        try{
+          await fbSignUp(em, pw);
+        } catch(e2){
+          if(btn){btn.disabled=false;btn.textContent=T().btnLogin||'Connexion';}
+          err.textContent='Erreur création compte : '+e2.message;err.classList.add('on');return;
+        }
+      } else {
+        if(btn){btn.disabled=false;btn.textContent=T().btnLogin||'Connexion';}
+        const na=lo.n+1;
+        if(na>=MAX_FAIL){setLock({n:na,until:Date.now()+LOCK_MS});startLockUI();err.textContent=T().errLocked;}
+        else{setLock({n:na,until:0});err.textContent=T().errFail(MAX_FAIL-na);}
+        err.classList.add('on');return;
+      }
+    } else {
+      if(btn){btn.disabled=false;btn.textContent=T().btnLogin||'Connexion';}
+      const na=lo.n+1;
+      if(na>=MAX_FAIL){setLock({n:na,until:Date.now()+LOCK_MS});startLockUI();err.textContent=T().errLocked;}
+      else{setLock({n:na,until:0});err.textContent=T().errFail(MAX_FAIL-na);}
+      err.classList.add('on');return;
+    }
   }
   setLock({n:0,until:0});
   const tok=uid();
