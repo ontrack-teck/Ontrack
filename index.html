@@ -958,8 +958,107 @@ const LS={
   del:k=>localStorage.removeItem(k)
 };
 
+// ═══════════════════ FIREBASE AUTH ══════════════════════
+const FIREBASE_API_KEY = 'AIzaSyDVo2twZMoX2mNWmZTY6vl467xlLIqLdtY';
+const FB_AUTH_URL = 'https://identitytoolkit.googleapis.com/v1';
+const FB_TOKEN_URL = 'https://securetoken.googleapis.com/v1';
+
+// État du token Firebase Auth
+let _fbIdToken = null;
+let _fbTokenExpiry = 0;
+let _fbRefreshToken = null;
+
+// Sauvegarder les tokens dans la session
+function saveFbTokens(idToken, refreshToken, expiresIn){
+  _fbIdToken = idToken;
+  _fbRefreshToken = refreshToken;
+  _fbTokenExpiry = Date.now() + (parseInt(expiresIn) * 1000);
+  const sess = getSession();
+  if(sess){ sess.fbIdToken=idToken; sess.fbRefreshToken=refreshToken; sess.fbTokenExpiry=_fbTokenExpiry; setSession(sess); }
+}
+
+// Restaurer les tokens depuis la session
+function restoreFbTokens(){
+  const sess = getSession();
+  if(sess && sess.fbIdToken){
+    _fbIdToken = sess.fbIdToken;
+    _fbRefreshToken = sess.fbRefreshToken;
+    _fbTokenExpiry = sess.fbTokenExpiry || 0;
+  }
+}
+
+// Obtenir un token valide (refresh si expiré)
+async function getFbToken(){
+  // Token encore valide (marge 2 min)
+  if(_fbIdToken && Date.now() < _fbTokenExpiry - 120000) return _fbIdToken;
+  // Essayer de refresh
+  if(_fbRefreshToken){
+    try{
+      const r = await fetch(`${FB_TOKEN_URL}/token?key=${FIREBASE_API_KEY}`, {
+        method:'POST',
+        headers:{'Content-Type':'application/x-www-form-urlencoded'},
+        body:`grant_type=refresh_token&refresh_token=${_fbRefreshToken}`
+      });
+      if(r.ok){
+        const d = await r.json();
+        saveFbTokens(d.id_token, d.refresh_token, d.expires_in);
+        return _fbIdToken;
+      }
+    }catch(e){}
+  }
+  return null; // Pas de token → accès refusé
+}
+
+// Connexion Firebase Auth
+async function fbSignIn(email, password){
+  const r = await fetch(`${FB_AUTH_URL}/accounts:signInWithPassword?key=${FIREBASE_API_KEY}`, {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({email, password, returnSecureToken:true})
+  });
+  const d = await r.json();
+  if(!r.ok) throw new Error(d.error?.message || 'LOGIN_FAILED');
+  saveFbTokens(d.idToken, d.refreshToken, d.expiresIn);
+  return d;
+}
+
+// Inscription Firebase Auth
+async function fbSignUp(email, password){
+  const r = await fetch(`${FB_AUTH_URL}/accounts:signUp?key=${FIREBASE_API_KEY}`, {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({email, password, returnSecureToken:true})
+  });
+  const d = await r.json();
+  if(!r.ok) throw new Error(d.error?.message || 'SIGNUP_FAILED');
+  saveFbTokens(d.idToken, d.refreshToken, d.expiresIn);
+  return d;
+}
+
+// Changement de mot de passe Firebase Auth
+async function fbChangePassword(newPassword){
+  const token = await getFbToken();
+  if(!token) throw new Error('NOT_AUTHENTICATED');
+  const r = await fetch(`${FB_AUTH_URL}/accounts:update?key=${FIREBASE_API_KEY}`, {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({idToken:token, password:newPassword, returnSecureToken:true})
+  });
+  const d = await r.json();
+  if(!r.ok) throw new Error(d.error?.message || 'CHANGE_PW_FAILED');
+  saveFbTokens(d.idToken, d.refreshToken, d.expiresIn);
+  return d;
+}
+
+// Supprimer un compte Firebase Auth
+async function fbDeleteAccount(idToken){
+  try{
+    await fetch(`${FB_AUTH_URL}/accounts:delete?key=${FIREBASE_API_KEY}`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({idToken})
+    });
+  }catch(e){}
+}
+
 // ═══════════════════ FIREBASE ════════════════════════════
-// Firebase via fetch REST API — fonctionne en file:// sans CDN
+// Firebase via fetch REST API avec authentification
 const FB_URL = "https://ontrack-flottes-default-rtdb.firebaseio.com";
 const FB = {
   // Normalise les données Firebase : reconvertit les objects {0,1,2} en arrays
@@ -968,7 +1067,6 @@ const FB = {
     if(Array.isArray(obj)) return obj.map(FB._normalize);
     if(typeof obj === 'object'){
       const keys = Object.keys(obj);
-      // Si toutes les clés sont des entiers consécutifs → c'est un array
       const isArr = keys.length > 0 && keys.every((k,i) => parseInt(k) === i);
       if(isArr) return keys.map(k => FB._normalize(obj[k]));
       const out = {};
@@ -977,9 +1075,14 @@ const FB = {
     }
     return obj;
   },
+  _authParam: async () => {
+    const t = await getFbToken();
+    return t ? `?auth=${t}` : '';
+  },
   get: async (path) => {
     try {
-      const r = await fetch(`${FB_URL}/${path}.json`);
+      const auth = await FB._authParam();
+      const r = await fetch(`${FB_URL}/${path}.json${auth}`);
       if(!r.ok) return null;
       const raw = await r.json();
       return FB._normalize(raw);
@@ -987,7 +1090,8 @@ const FB = {
   },
   set: async (path, val) => {
     try {
-      await fetch(`${FB_URL}/${path}.json`, {
+      const auth = await FB._authParam();
+      await fetch(`${FB_URL}/${path}.json${auth}`, {
         method:'PUT', headers:{'Content-Type':'application/json'},
         body: JSON.stringify(val)
       });
@@ -995,7 +1099,8 @@ const FB = {
   },
   update: async (path, val) => {
     try {
-      await fetch(`${FB_URL}/${path}.json`, {
+      const auth = await FB._authParam();
+      await fetch(`${FB_URL}/${path}.json${auth}`, {
         method:'PATCH', headers:{'Content-Type':'application/json'},
         body: JSON.stringify(val)
       });
@@ -1003,7 +1108,8 @@ const FB = {
   },
   del: async (path) => {
     try {
-      await fetch(`${FB_URL}/${path}.json`, {method:'DELETE'});
+      const auth = await FB._authParam();
+      await fetch(`${FB_URL}/${path}.json${auth}`, {method:'DELETE'});
     } catch(e) {}
   },
   // Polling toutes les 30s avec blocage post-écriture
@@ -1415,7 +1521,10 @@ async function boot(){
     else { _platformsCache=DEFAULT_PLATFORMS; FB.set('platforms',DEFAULT_PLATFORMS); }
   } catch(e){ _platformsCache=DEFAULT_PLATFORMS; }
 
-  // ── Vérifier si une session active existe ──────────────────────────
+  // ── Restaurer les tokens Firebase Auth depuis la session ──────────
+  restoreFbTokens();
+
+  // ── Vérifier si une session active existe ────────────────────────
   const sess = getSession();
   if(sess && sess.platform && sess.email && sess.tok){
     // Vérifier expiration 8h
@@ -1469,6 +1578,19 @@ async function doSetup(){
   if(!validEmail(em)){err.textContent=T().errEmail;err.classList.add('on');return;}
   if(pw.length<6){err.textContent=T().errShort;err.classList.add('on');return;}
   if(pw!==pw2){err.textContent=T().errMatch;err.classList.add('on');return;}
+  const btn=document.getElementById('su_btn');if(btn){btn.disabled=true;btn.textContent='⏳ Création...';}
+  try{
+    // Créer le compte Firebase Auth
+    await fbSignUp(em, pw);
+  } catch(e){
+    // Compte existe déjà → essayer de se connecter
+    if(e.message === 'EMAIL_EXISTS'){
+      try{ await fbSignIn(em, pw); }
+      catch(e2){ err.textContent='Compte existant — mot de passe incorrect.';err.classList.add('on');if(btn){btn.disabled=false;btn.textContent='Créer'}return; }
+    } else {
+      err.textContent='Erreur Firebase Auth : '+e.message;err.classList.add('on');if(btn){btn.disabled=false;btn.textContent='Créer'}return;
+    }
+  }
   const tok=uid();
   const adminUser={email:em,h:await hash(pw),role:'admin',status:'active',tok};
   setUserToken(adminUser, DEVICE_ID, tok);
@@ -1476,6 +1598,7 @@ async function doSetup(){
   setSession({email:em,tok,base:currentBase,platform:currentPlatform,loginAt:Date.now()});
   currentUser={email:em,role:'admin'};
   addSession({email:em,tok,base:currentBase});
+  if(btn){btn.disabled=false;btn.textContent='Créer';}
   document.getElementById('scrSetup').classList.remove('on');
   showApp();
   loadBaseData();
@@ -1487,19 +1610,34 @@ async function doFirstLogin(){
   const pw=document.getElementById('fi_pw').value;
   const pw2=document.getElementById('fi_pw2').value;
   const err=document.getElementById('fi_err');err.classList.remove('on');
+  // Recharger les users depuis Firebase si cache vide
+  if(!_usersCache||!_usersCache.length){ const fu=await FB.get(uKey()).catch(()=>null); if(fu&&fu.length)_usersCache=fu; }
   const users=getUsers();
   const u=users.find(u=>u.email===em&&u.status==='pending');
   if(!u){err.textContent=T().errNoInvite;err.classList.add('on');return;}
   if(pw.length<6){err.textContent=T().errShort;err.classList.add('on');return;}
   if(pw!==pw2){err.textContent=T().errMatch;err.classList.add('on');return;}
+  const btn=document.getElementById('fi_btn');if(btn){btn.disabled=true;btn.textContent='⏳ Activation...';}
+  try{
+    // Créer le compte Firebase Auth
+    await fbSignUp(em, pw);
+  } catch(e){
+    if(e.message === 'EMAIL_EXISTS'){
+      try{ await fbSignIn(em, pw); }
+      catch(e2){ err.textContent='Erreur de connexion. Contactez l administrateur.';err.classList.add('on');if(btn){btn.disabled=false;btn.textContent='Activer'}return; }
+    } else {
+      err.textContent='Erreur : '+e.message;err.classList.add('on');if(btn){btn.disabled=false;btn.textContent='Activer'}return;
+    }
+  }
   const tok=uid();
   const pwHash=await hash(pw);
   u.h=pwHash;u.status='active';
   setUserToken(u, DEVICE_ID, tok);
-  setUsers(users); // uKey() = store partagé → une seule écriture suffit
+  setUsers(users);
   setSession({email:em,tok,base:currentBase,platform:currentPlatform,loginAt:Date.now()});
-  currentUser={email:em,role:'user'};
+  currentUser={email:em,role:u.role||'user'};
   addSession({email:em,tok,base:currentBase});
+  if(btn){btn.disabled=false;btn.textContent='Activer';}
   document.getElementById('scrFirst').classList.remove('on');
   showApp();
   loadBaseData();
@@ -1511,6 +1649,9 @@ async function doLogin(){
   const em=document.getElementById('li_email').value.trim();
   const pw=document.getElementById('li_pw').value;
   const err=document.getElementById('li_err');err.classList.remove('on');
+  const btn=document.getElementById('li_btn');
+  // Recharger les users depuis Firebase si cache vide
+  if(!_usersCache||!_usersCache.length){ const fu=await FB.get(uKey()).catch(()=>null); if(fu&&fu.length)_usersCache=fu; }
   const users=getUsers();
   // Check if pending user → redirect to first login
   const pending=users.find(u=>u.email===em&&u.status==='pending');
@@ -1522,53 +1663,38 @@ async function doLogin(){
   }
   const blocked=users.find(u=>u.email===em&&u.status==='blocked');
   if(blocked){err.textContent=T().errBlocked;err.classList.add('on');return;}
-
-  const newHash = await hash(pw);
-  const legacyHash = hashLegacy(pw);
-
-  // Chercher d'abord avec SHA-256, puis avec l'ancien hash (migration)
-  let u = users.find(u=>u.email===em&&u.status==='active'&&u.h===newHash);
-  let needsMigration = false;
-  if(!u){
-    u = users.find(u=>u.email===em&&u.status==='active'&&u.h===legacyHash);
-    if(u) needsMigration = true;
-  }
-
+  // Vérifier dans la DB que l'utilisateur existe
+  const u=users.find(u=>u.email===em&&u.status==='active');
   if(!u){
     const na=lo.n+1;
     if(na>=MAX_FAIL){setLock({n:na,until:Date.now()+LOCK_MS});startLockUI();err.textContent=T().errLocked;}
     else{setLock({n:na,until:0});err.textContent=T().errFail(MAX_FAIL-na);}
     err.classList.add('on');return;
   }
-  setLock({n:0,until:0});
-
-  // Migration automatique : remplacer l'ancien hash par SHA-256
-  if(needsMigration){
-    u.h = newHash;
-    const allUsers = getUsers();
-    const idx = allUsers.findIndex(x=>x.email===em);
-    if(idx>=0) allUsers[idx].h = newHash;
-    setUsers(allUsers);
-    await FB.set(uKey(), allUsers);
-    // Migration: le store users est partagé (uKey) — setUsers() suffit
+  // Authentification via Firebase Auth
+  if(btn){btn.disabled=true;btn.textContent='⏳ Connexion...';}
+  try{
+    await fbSignIn(em, pw);
+  } catch(e){
+    if(btn){btn.disabled=false;btn.textContent=T().btnLogin||'Connexion';}
+    const na=lo.n+1;
+    if(na>=MAX_FAIL){setLock({n:na,until:Date.now()+LOCK_MS});startLockUI();err.textContent=T().errLocked;}
+    else{setLock({n:na,until:0});err.textContent=T().errFail(MAX_FAIL-na);}
+    err.classList.add('on');return;
   }
-  // Sync pending: le store users est partagé (uKey) — une seule écriture suffit
-  const sharedUsers=getUsers();
-  const pendingU=sharedUsers.find(x=>x.email===em&&x.status==='pending');
-  if(pendingU){ pendingU.h=u.h; pendingU.status='active'; await setUsers(sharedUsers); }
+  setLock({n:0,until:0});
   const tok=uid();
   const allUsers=getUsers();
   const loginUser=allUsers.find(x=>x.email===em);
-  setUserToken(loginUser, DEVICE_ID, tok);
-  setUsers(allUsers);
+  if(loginUser){ setUserToken(loginUser, DEVICE_ID, tok); await setUsers(allUsers); }
   const _loginAt = Date.now();
   setSession({email:em,tok,base:currentBase,platform:currentPlatform,loginAt:_loginAt});
   currentUser={email:em,role:u.role};
   addSession({email:em,tok,base:currentBase});
+  if(btn){btn.disabled=false;btn.textContent=T().btnLogin||'Connexion';}
   document.getElementById('scrLogin').classList.remove('on');
   showApp();
-  loadBaseData(); // charger les véhicules + monter le listener FB.on(users)
-  // Notification connexion (après showApp pour avoir les abonnements chargés)
+  loadBaseData();
   setTimeout(()=>{
     sendPushToAdmins(
       '👤 Connexion — ' + currentBase,
@@ -1588,10 +1714,11 @@ function doLogout(){
     if(u){ removeUserToken(u, DEVICE_ID); setUsers(users); }
     removeStoredSession(currentUser.email);
   }
+  // Effacer les tokens Firebase Auth
+  _fbIdToken = null; _fbRefreshToken = null; _fbTokenExpiry = 0;
   setSession(null);
   currentUser=null;
   document.getElementById('shell').classList.remove('on');
-  // Retourner à l'écran de sélection de plateforme
   renderPlatformScreen();
   document.getElementById('scrPlatform').classList.add('on');
 }
@@ -1957,13 +2084,17 @@ async function chgPw(){
   const users=getUsers(),u=users.find(x=>x.email===currentUser.email);
   const op=document.getElementById('apOp').value,np=document.getElementById('apNp').value,cp=document.getElementById('apCp').value;
   const msg=document.getElementById('apMp');msg.className='apmsg';
-  const opHash=await hash(op);
-  if(opHash!==u.h && hashLegacy(op)!==u.h){msg.textContent=T().errWrongPw;msg.classList.add('err');return;}
   if(np.length<6){msg.textContent=T().errShort;msg.classList.add('err');return;}
   if(np!==cp){msg.textContent=T().errMatch;msg.classList.add('err');return;}
+  // Vérifier l'ancien mot de passe via Firebase Auth
+  try{ await fbSignIn(currentUser.email, op); }
+  catch(e){ msg.textContent=T().errWrongPw;msg.classList.add('err');return; }
+  // Changer le mot de passe dans Firebase Auth
+  try{ await fbChangePassword(np); }
+  catch(e){ msg.textContent='Erreur Auth : '+e.message;msg.classList.add('err');return; }
+  // Mettre à jour le hash dans la DB
   const newHash=await hash(np);
-  u.h=newHash;
-  setUsers(users); // uKey() = store partagé → une seule écriture suffit
+  if(u){ u.h=newHash; setUsers(users); }
   ['apOp','apNp','apCp'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('apPwB').style.cssText='';document.getElementById('apPwH').textContent='';
   msg.textContent=T().okPw;msg.classList.add('ok');
