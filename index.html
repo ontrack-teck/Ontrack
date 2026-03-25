@@ -1623,35 +1623,40 @@ async function doSetup(){
 }
 
 // ═══════════════════ FIRST LOGIN (pending user sets password) ═══════════════════
+// L'admin a invité l'user via Firebase Auth → il se connecte directement avec son nouveau mot de passe
+// Ce screen s'affiche si le statut est encore "pending" dans la DB ONTRACK
 async function doFirstLogin(){
   const em=document.getElementById('fi_email').value.trim();
   const pw=document.getElementById('fi_pw').value;
   const pw2=document.getElementById('fi_pw2').value;
   const err=document.getElementById('fi_err');err.classList.remove('on');
-  // Recharger les users depuis Firebase si cache vide
-  if(!_usersCache||!_usersCache.length){ const fu=await FB.get(uKey()).catch(()=>null); if(fu&&fu.length)_usersCache=fu; }
-  const users=getUsers();
-  const u=users.find(u=>u.email===em&&u.status==='pending');
-  if(!u){err.textContent=T().errNoInvite;err.classList.add('on');return;}
   if(pw.length<6){err.textContent=T().errShort;err.classList.add('on');return;}
   if(pw!==pw2){err.textContent=T().errMatch;err.classList.add('on');return;}
   const btn=document.getElementById('fi_btn');if(btn){btn.disabled=true;btn.textContent='⏳ Activation...';}
+  // Connexion Firebase Auth (le compte a été créé par l'admin lors de l'invitation)
   try{
-    // Créer le compte Firebase Auth
-    await fbSignUp(em, pw);
+    await fbSignIn(em, pw);
   } catch(e){
-    if(e.message === 'EMAIL_EXISTS'){
-      try{ await fbSignIn(em, pw); }
-      catch(e2){ err.textContent='Erreur de connexion. Contactez l administrateur.';err.classList.add('on');if(btn){btn.disabled=false;btn.textContent='Activer'}return; }
+    // Essayer de créer si inexistant
+    if(e.message==='EMAIL_NOT_FOUND'||e.message==='INVALID_LOGIN_CREDENTIALS'){
+      try{ await fbSignUp(em, pw); }
+      catch(e2){ err.textContent='Erreur : '+e2.message;err.classList.add('on');if(btn){btn.disabled=false;btn.textContent='Activer';}return; }
     } else {
-      err.textContent='Erreur : '+e.message;err.classList.add('on');if(btn){btn.disabled=false;btn.textContent='Activer'}return;
+      err.textContent='Mot de passe incorrect. Vérifiez le lien email reçu.';err.classList.add('on');if(btn){btn.disabled=false;btn.textContent='Activer';}return;
     }
   }
+  // Charger les users depuis Firebase (token disponible maintenant)
+  const fbUsers = await FB.get(uKey()).catch(()=>null);
+  if(fbUsers && Array.isArray(fbUsers) && fbUsers.length) _usersCache = fbUsers;
+  const users = getUsers();
+  const u = users.find(u=>u.email===em);
+  if(!u){err.textContent=T().errNoInvite;err.classList.add('on');if(btn){btn.disabled=false;btn.textContent='Activer';}return;}
+  // Activer le compte dans ONTRACK
   const tok=uid();
   const pwHash=await hash(pw);
-  u.h=pwHash;u.status='active';
+  u.h=pwHash; u.status='active';
   setUserToken(u, DEVICE_ID, tok);
-  setUsers(users);
+  await setUsers(users);
   setSession(makeSession(em,tok,currentBase,currentPlatform));
   currentUser={email:em,role:u.role||'user'};
   addSession({email:em,tok,base:currentBase});
@@ -1997,7 +2002,7 @@ function switchAPTab(tab){
 const admOel=document.getElementById('admO');
 if(admOel) admOel.addEventListener('click',e=>{if(e.target===admOel)closeAdm();});
 
-function addUser(){ if(!canDo('manageUsers')){alert('Accès refusé.');return;}
+async function addUser(){ if(!canDo('manageUsers')){alert('Accès refusé.');return;}
   const em=document.getElementById('apUemail').value.trim();
   const msg=document.getElementById('apMU');msg.className='apmsg';
   if(!validEmail(em)){msg.textContent=T().errEmail;msg.classList.add('err');return;}
@@ -2005,20 +2010,42 @@ function addUser(){ if(!canDo('manageUsers')){alert('Accès refusé.');return;}
   if(users.find(u=>u.email===em)){msg.textContent=T().errUserExists;msg.classList.add('err');return;}
   const roleSelect=document.getElementById('apUrole');
   const newRole=roleSelect?roleSelect.value:'user';
-  users.push({email:em,h:null,role:newRole,status:'pending',tok:null});
-  setUsers(users);
-  // Propager l'utilisateur vers toutes les autres bases (accès en attente)
-  const allBases=getBases();
-  allBases.forEach(async b=>{
-    if(b.id===currentBase) return;
-    const bUsers=await FB.get(uKey())||[];
-    if(!bUsers.find(u=>u.email===em)){
-      bUsers.push({email:em,h:null,role:newRole,status:'pending',tok:null});
-      await FB.set(uKey(),bUsers);
+  const btn=document.getElementById('apBU');
+  if(btn){btn.disabled=true;btn.textContent='⏳ Invitation...';}
+  msg.textContent='Creation du compte Firebase Auth...';msg.className='apmsg';
+
+  // 1. Créer le compte Firebase Auth avec un mot de passe temporaire aléatoire
+  const tmpPw = 'ONT-' + Math.random().toString(36).slice(2,10).toUpperCase();
+  try{
+    await fbSignUp(em, tmpPw);
+  } catch(e){
+    if(e.message !== 'EMAIL_EXISTS'){
+      if(btn){btn.disabled=false;btn.textContent="Créer l'accès";}
+      msg.textContent='Erreur Firebase Auth : '+e.message;msg.classList.add('err');return;
     }
-  });
+    // Compte déjà dans Firebase Auth → OK, on continue
+  }
+
+  // 2. Envoyer un email de réinitialisation de mot de passe
+  msg.textContent="Envoi de l'email d'invitation...";
+  try{
+    const r = await fetch(`${FB_AUTH_URL}/accounts:sendOobCode?key=${FIREBASE_API_KEY}`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({requestType:'PASSWORD_RESET', email:em})
+    });
+    if(!r.ok){ const d=await r.json(); throw new Error(d.error?.message||'ERREUR'); }
+  } catch(e){
+    if(btn){btn.disabled=false;btn.textContent="Créer l'accès";}
+    msg.textContent='Compte créé mais email non envoyé : '+e.message;msg.classList.add('err');return;
+  }
+
+  // 3. Ajouter dans la DB ONTRACK
+  users.push({email:em,h:null,role:newRole,status:'pending',tok:null});
+  await setUsers(users);
   document.getElementById('apUemail').value='';
-  msg.textContent=T().okUserAdded.replace('{email}',em);msg.classList.add('ok');
+  if(btn){btn.disabled=false;btn.textContent="Créer l'accès";}
+  msg.textContent='✅ Invitation envoyée à '+em+' ! Il recevra un email pour définir son mot de passe.';
+  msg.classList.add('ok');
   renderUserList();
 }
 
@@ -2080,10 +2107,32 @@ async function renderUserList(){
         <select onchange="changeRole('${u.email}',this.value)" style="background:var(--card);color:var(--fg);border:1px solid var(--border);border-radius:6px;padding:4px 6px;font-size:11px;font-weight:700;cursor:pointer;">
           ${ROLES.map(r=>`<option value="${r}" ${u.role===r?'selected':''}>${(ROLE_LABELS[r]||{fr:r})[lang]||r}</option>`).join('')}
         </select>
+        ${u.status==='pending'?`<button onclick="resendInvite('${u.email}')" title="Renvoyer invitation" style="background:rgba(74,158,255,.15);border:1px solid var(--blue);color:var(--blue);border-radius:6px;padding:4px 8px;font-size:11px;font-weight:700;cursor:pointer;">📧 Inviter</button>`:''}
         ${u.status!=='pending'?`<button class="uitem-block" onclick="toggleBlock('${u.email}')" title="${u.status==='blocked'?L.unblockUser:L.blockUser}">${u.status==='blocked'?'🔓':'🔒'}</button>`:''}
         <button class="uitem-del" onclick="removeUser('${u.email}')" title="${L.delUser}">🗑</button>
       </div>
     </div>`).join('');
+}
+
+// ═══════════════════ INVITATION UTILISATEURS ════════════════════
+async function resendInvite(email){
+  const msg = document.getElementById('apMU');
+  msg.className='apmsg';
+  msg.textContent='📧 Envoi invitation à '+email+'...';
+  try{
+    // S'assurer que le compte Firebase Auth existe
+    const tmpPw = 'ONT-' + Math.random().toString(36).slice(2,10).toUpperCase();
+    try{ await fbSignUp(email, tmpPw); }catch(e){ if(e.message!=='EMAIL_EXISTS') throw e; }
+    // Envoyer email de réinitialisation
+    const r = await fetch(`${FB_AUTH_URL}/accounts:sendOobCode?key=${FIREBASE_API_KEY}`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({requestType:'PASSWORD_RESET', email})
+    });
+    if(!r.ok){ const d=await r.json(); throw new Error(d.error?.message||'ERREUR'); }
+    msg.textContent='✅ Invitation renvoyée à '+email;msg.classList.add('ok');
+  } catch(e){
+    msg.textContent='Erreur : '+e.message;msg.classList.add('err');
+  }
 }
 
 // ═══════════════════ RÉCUPÉRATION UTILISATEURS ═══════════════════
