@@ -501,6 +501,8 @@ tbody td{padding:11px 17px;font-size:12px;}
       <div class="spw"><input type="password" class="ainp" id="li_pw" onkeydown="if(event.key==='Enter')doLogin()"><button class="tpwb" onclick="togPw('li_pw',this)" tabindex="-1">👁</button></div>
     </div>
     <button class="abtn" onclick="doLogin()" id="li_btn">Se connecter</button>
+    <button onclick="sendPasswordReset()" style="background:none;border:none;color:var(--muted);font-size:12px;margin-top:10px;cursor:pointer;font-family:'Syne',sans-serif;text-decoration:underline;">Mot de passe oublié ?</button>
+    <div class="aok" id="li_reset_ok"></div>
   </div>
 </div>
 
@@ -1676,21 +1678,34 @@ async function doLogin(){
   try{
     await fbSignIn(em, pw);
   } catch(e){
-    // Si le compte n'existe pas encore dans Firebase Auth → migration automatique
-    // On vérifie d'abord le mot de passe avec l'ancien hash SHA-256
-    if(e.message === 'EMAIL_NOT_FOUND' || e.message === 'INVALID_LOGIN_CREDENTIALS'){
+    // fbSignIn a échoué — 3 cas possibles :
+    // 1) Compte inexistant → migration depuis ancien hash
+    // 2) Compte existant mais EMAIL_EXISTS après fbSignUp → re-tenter fbSignIn
+    // 3) Mauvais mot de passe → erreur normale
+    const isAuthError = e.message === 'EMAIL_NOT_FOUND' || e.message === 'INVALID_LOGIN_CREDENTIALS' || e.message === 'INVALID_PASSWORD';
+    if(isAuthError){
+      // Vérifier si le mot de passe correspond à l'ancien hash ONTRACK
       const checkHash = await hash(pw);
       const legacyCheck = hashLegacy(pw);
       const uCheck = users.find(x=>x.email===em && x.status==='active' && (x.h===checkHash || x.h===legacyCheck));
       if(uCheck){
-        // Mot de passe correct → créer le compte Firebase Auth automatiquement
+        // Mot de passe correct côté ONTRACK → tenter création Firebase Auth
         try{
           await fbSignUp(em, pw);
+          // Succès → compte créé, la suite du code peut continuer
         } catch(e2){
+          if(e2.message === 'EMAIL_EXISTS'){
+            // Compte déjà dans Firebase Auth mais avec un mot de passe différent
+            // → mettre à jour le mot de passe Firebase Auth via réinitialisation
+            if(btn){btn.disabled=false;btn.textContent=T().btnLogin||'Connexion';}
+            err.textContent='Compte existant dans Firebase. Utilisez "Mot de passe oublié" ou contactez l admin.';
+            err.classList.add('on');return;
+          }
           if(btn){btn.disabled=false;btn.textContent=T().btnLogin||'Connexion';}
-          err.textContent='Erreur création compte : '+e2.message;err.classList.add('on');return;
+          err.textContent='Erreur Auth : '+e2.message;err.classList.add('on');return;
         }
       } else {
+        // Mauvais mot de passe
         if(btn){btn.disabled=false;btn.textContent=T().btnLogin||'Connexion';}
         const na=lo.n+1;
         if(na>=MAX_FAIL){setLock({n:na,until:Date.now()+LOCK_MS});startLockUI();err.textContent=T().errLocked;}
@@ -1725,6 +1740,27 @@ async function doLogin(){
       'user-login'
     );
   }, 3000);
+}
+
+// ═══════════════════ RESET MOT DE PASSE ═══════════════════
+async function sendPasswordReset(){
+  const em = document.getElementById('li_email').value.trim();
+  const ok = document.getElementById('li_reset_ok');
+  const err = document.getElementById('li_err');
+  if(!em){ if(err){err.textContent='Entrez votre adresse e-mail.';err.classList.add('on');} return; }
+  if(ok) ok.classList.remove('on');
+  try{
+    const r = await fetch(`${FB_AUTH_URL}/accounts:sendOobCode?key=${FIREBASE_API_KEY}`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({requestType:'PASSWORD_RESET', email:em})
+    });
+    const d = await r.json();
+    if(!r.ok) throw new Error(d.error?.message||'ERREUR');
+    if(ok){ ok.textContent='Email de reinitialisation envoye a '+em; ok.classList.add('on'); }
+    if(err) err.classList.remove('on');
+  } catch(e){
+    if(err){ err.textContent='Erreur : '+e.message; err.classList.add('on'); }
+  }
 }
 
 function doLogout(){
