@@ -4196,7 +4196,7 @@ function renderDet(id){
       <div style="display:flex;gap:8px;align-items:center;">
         <button class="btn-e" style="background:var(--surface2);color:var(--accent);border:1px solid var(--accent);" onclick="openQR('${id}')">🔲 QR</button>
         ${canDo('editVehicle')?`<button class="btn-e" onclick="openEditV('${id}')">${L.btnEdit}</button>`:''}
-        ${isAdmin?`<button class="btn-r" onclick="delV('${id}')">${L.btnDel}</button>`:''}
+        ${canDo('deleteVehicle')?`<button class="btn-r" onclick="delV('${id}')">${L.btnDel}</button>`:''}
       </div>
     </div>
     <div class="sgrid">
@@ -4208,7 +4208,7 @@ function renderDet(id){
     ${Object.keys(tc).length?`
     <div class="csec"><div class="stit">${L.cByT}</div><div class="tbrs">${Object.entries(tc).sort((a,b)=>b[1]-a[1]).map(([tp,c])=>`<div class="trow"><div class="tlbl">${tp}</div><div class="tbb"><div class="tbf" style="width:${(c/mx)*100}%;background:${TC()[tp]||'#888'}"></div></div><div class="tcnt">${c}</div></div>`).join('')}</div></div>
     <div class="csec"><div class="stit">${L.cMon} ${curYear}</div><div class="mch">${mc.map((c,m)=>`<div class="mcc"><div class="mb" style="height:${c?(c/mxm)*100:2}%"></div><div class="mlbl">${L.months[m]}</div></div>`).join('')}</div></div>`:''}
-    <div class="isec"><div class="ihdr"><div class="stit" style="margin:0">${L.hist}</div><button class="btn-g" onclick="openAddI()">${L.btnGi}</button></div>
+    <div class="isec"><div class="ihdr"><div class="stit" style="margin:0">${L.hist}</div>${canDo('createIntervention')?`<button class="btn-g" onclick="openAddI()">${L.btnGi}</button>`:''}</div>
     ${ii.length?`
     ${renderInterventionsPage(ii,isAdmin,L)}
     `:`<div style="padding:26px;text-align:center;color:var(--muted);font-size:12px;">${L.noI} ${curYear}</div>`}
