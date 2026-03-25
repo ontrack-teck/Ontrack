@@ -1652,60 +1652,35 @@ async function doLogin(){
   const pw=document.getElementById('li_pw').value;
   const err=document.getElementById('li_err');err.classList.remove('on');
   const btn=document.getElementById('li_btn');
-  // Recharger les users depuis Firebase si cache vide
-  if(!_usersCache||!_usersCache.length){ const fu=await FB.get(uKey()).catch(()=>null); if(fu&&fu.length)_usersCache=fu; }
-  const users=getUsers();
-  // Check if pending user → redirect to first login
-  const pending=users.find(u=>u.email===em&&u.status==='pending');
-  if(pending){
-    document.getElementById('scrLogin').classList.remove('on');
-    document.getElementById('fi_email').value=em;
-    document.getElementById('scrFirst').classList.add('on');
-    return;
-  }
-  const blocked=users.find(u=>u.email===em&&u.status==='blocked');
-  if(blocked){err.textContent=T().errBlocked;err.classList.add('on');return;}
-  // Vérifier dans la DB que l'utilisateur existe
-  const u=users.find(u=>u.email===em&&u.status==='active');
-  if(!u){
-    const na=lo.n+1;
-    if(na>=MAX_FAIL){setLock({n:na,until:Date.now()+LOCK_MS});startLockUI();err.textContent=T().errLocked;}
-    else{setLock({n:na,until:0});err.textContent=T().errFail(MAX_FAIL-na);}
-    err.classList.add('on');return;
-  }
-  // Authentification via Firebase Auth
+  if(!em||!pw){err.textContent='Email et mot de passe requis.';err.classList.add('on');return;}
   if(btn){btn.disabled=true;btn.textContent='⏳ Connexion...';}
+
+  // ── ÉTAPE 1 : Firebase Auth en priorité ──────────────────────────
+  // Avec les règles auth!=null, on ne peut pas charger la DB avant connexion
   try{
     await fbSignIn(em, pw);
-  } catch(e){
-    // fbSignIn a échoué — 3 cas possibles :
-    // 1) Compte inexistant → migration depuis ancien hash
-    // 2) Compte existant mais EMAIL_EXISTS après fbSignUp → re-tenter fbSignIn
-    // 3) Mauvais mot de passe → erreur normale
-    const isAuthError = e.message === 'EMAIL_NOT_FOUND' || e.message === 'INVALID_LOGIN_CREDENTIALS' || e.message === 'INVALID_PASSWORD';
-    if(isAuthError){
-      // Vérifier si le mot de passe correspond à l'ancien hash ONTRACK
+  } catch(fbErr){
+    // Firebase Auth a échoué → tenter migration depuis ancien hash ONTRACK
+    // Pour ça on a besoin de lire la DB → utiliser un accès temporaire sans auth
+    // en vérifiant le hash localement si le cache existe
+    const isWrongPw = fbErr.message==='INVALID_LOGIN_CREDENTIALS' || fbErr.message==='INVALID_PASSWORD' || fbErr.message==='EMAIL_NOT_FOUND';
+    if(isWrongPw && _usersCache && _usersCache.length){
+      // Cache disponible → vérifier l'ancien hash
       const checkHash = await hash(pw);
       const legacyCheck = hashLegacy(pw);
-      const uCheck = users.find(x=>x.email===em && x.status==='active' && (x.h===checkHash || x.h===legacyCheck));
+      const uCheck = _usersCache.find(x=>x.email===em && x.status==='active' && (x.h===checkHash||x.h===legacyCheck));
       if(uCheck){
-        // Mot de passe correct côté ONTRACK → tenter création Firebase Auth
-        try{
-          await fbSignUp(em, pw);
-          // Succès → compte créé, la suite du code peut continuer
-        } catch(e2){
-          if(e2.message === 'EMAIL_EXISTS'){
-            // Compte déjà dans Firebase Auth mais avec un mot de passe différent
-            // → mettre à jour le mot de passe Firebase Auth via réinitialisation
-            if(btn){btn.disabled=false;btn.textContent=T().btnLogin||'Connexion';}
-            err.textContent='Compte existant dans Firebase. Utilisez "Mot de passe oublié" ou contactez l admin.';
-            err.classList.add('on');return;
-          }
+        try{ await fbSignUp(em, pw); }
+        catch(e2){
           if(btn){btn.disabled=false;btn.textContent=T().btnLogin||'Connexion';}
-          err.textContent='Erreur Auth : '+e2.message;err.classList.add('on');return;
+          if(e2.message==='EMAIL_EXISTS'){
+            err.textContent='Mot de passe Firebase different du mot de passe ONTRACK. Utilisez "Mot de passe oublié".';
+          } else {
+            err.textContent='Erreur : '+e2.message;
+          }
+          err.classList.add('on');return;
         }
       } else {
-        // Mauvais mot de passe
         if(btn){btn.disabled=false;btn.textContent=T().btnLogin||'Connexion';}
         const na=lo.n+1;
         if(na>=MAX_FAIL){setLock({n:na,until:Date.now()+LOCK_MS});startLockUI();err.textContent=T().errLocked;}
@@ -1720,14 +1695,43 @@ async function doLogin(){
       err.classList.add('on');return;
     }
   }
+
+  // ── ÉTAPE 2 : Firebase Auth OK → charger les users depuis la DB ──
   setLock({n:0,until:0});
+  // Maintenant qu'on a un token, on peut lire Firebase
+  const fbUsers = await FB.get(uKey()).catch(()=>null);
+  if(fbUsers && Array.isArray(fbUsers) && fbUsers.length) _usersCache = fbUsers;
+  const users = getUsers();
+
+  // Vérifier que cet email est bien autorisé dans ONTRACK
+  const blocked = users.find(x=>x.email===em && x.status==='blocked');
+  if(blocked){
+    _fbIdToken=null;_fbRefreshToken=null;
+    if(btn){btn.disabled=false;btn.textContent=T().btnLogin||'Connexion';}
+    err.textContent=T().errBlocked;err.classList.add('on');return;
+  }
+  const pending = users.find(x=>x.email===em && x.status==='pending');
+  if(pending){
+    if(btn){btn.disabled=false;btn.textContent=T().btnLogin||'Connexion';}
+    document.getElementById('scrLogin').classList.remove('on');
+    document.getElementById('fi_email').value=em;
+    document.getElementById('scrFirst').classList.add('on');
+    return;
+  }
+  let u = users.find(x=>x.email===em && x.status==='active');
+  if(!u){
+    // User pas encore dans la DB → créer une entrée basique
+    u = {email:em, role:'user', status:'active', h:null, tok:null};
+    users.push(u); _usersCache = users; await FB.set(uKey(), users);
+  }
+
+  // ── ÉTAPE 3 : Session ONTRACK ─────────────────────────────────────
   const tok=uid();
-  const allUsers=getUsers();
-  const loginUser=allUsers.find(x=>x.email===em);
-  if(loginUser){ setUserToken(loginUser, DEVICE_ID, tok); await setUsers(allUsers); }
+  setUserToken(u, DEVICE_ID, tok);
+  await setUsers(users);
   const _loginAt = Date.now();
   setSession({email:em,tok,base:currentBase,platform:currentPlatform,loginAt:_loginAt});
-  currentUser={email:em,role:u.role};
+  currentUser={email:em,role:u.role||'user'};
   addSession({email:em,tok,base:currentBase});
   if(btn){btn.disabled=false;btn.textContent=T().btnLogin||'Connexion';}
   document.getElementById('scrLogin').classList.remove('on');
