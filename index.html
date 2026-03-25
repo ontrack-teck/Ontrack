@@ -1163,7 +1163,9 @@ async function checkFBConnection(){
   const badge = document.getElementById('syncBadge');
   if(!badge) return;
   try {
-    const r = await fetch(`${FB_URL}/.json?shallow=true`, {signal: AbortSignal.timeout(3000)});
+    const token = await getFbToken().catch(()=>null);
+    const authParam = token ? `?auth=${token}&shallow=true` : '?shallow=true';
+    const r = await fetch(`${FB_URL}/.json${authParam}`, {signal: AbortSignal.timeout(3000)});
     if(r.ok){
       badge.style.display='';
       badge.textContent='🟢 sync';
