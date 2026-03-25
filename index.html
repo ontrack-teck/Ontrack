@@ -979,6 +979,17 @@ function saveFbTokens(idToken, refreshToken, expiresIn){
   if(sess){ sess.fbIdToken=idToken; sess.fbRefreshToken=refreshToken; sess.fbTokenExpiry=_fbTokenExpiry; setSession(sess); }
 }
 
+// Créer une session ONTRACK en préservant les tokens Firebase Auth
+function makeSession(email, tok, base, platform, loginAt){
+  return {
+    email, tok, base, platform,
+    loginAt: loginAt || Date.now(),
+    fbIdToken: _fbIdToken || null,
+    fbRefreshToken: _fbRefreshToken || null,
+    fbTokenExpiry: _fbTokenExpiry || 0
+  };
+}
+
 // Restaurer les tokens depuis la session
 function restoreFbTokens(){
   const sess = getSession();
@@ -1516,15 +1527,18 @@ async function boot(){
   if(_fbConnInterval) clearInterval(_fbConnInterval);
   _fbConnInterval = setInterval(checkFBConnection, 10000);
 
-  // Charger les plateformes
+  // ── Restaurer les tokens Firebase Auth EN PREMIER ───────────────
+  // Sans ça, tous les appels FB.get échouent avec auth != null
+  restoreFbTokens();
+  // Tenter un refresh du token si nécessaire
+  await getFbToken().catch(()=>{});
+
+  // Charger les plateformes (maintenant qu'on a un token)
   try{
     const fbPlats = await FB.get('platforms');
     if(fbPlats && fbPlats.length) _platformsCache=fbPlats;
     else { _platformsCache=DEFAULT_PLATFORMS; FB.set('platforms',DEFAULT_PLATFORMS); }
   } catch(e){ _platformsCache=DEFAULT_PLATFORMS; }
-
-  // ── Restaurer les tokens Firebase Auth depuis la session ──────────
-  restoreFbTokens();
 
   // ── Vérifier si une session active existe ────────────────────────
   const sess = getSession();
@@ -1597,7 +1611,7 @@ async function doSetup(){
   const adminUser={email:em,h:await hash(pw),role:'admin',status:'active',tok};
   setUserToken(adminUser, DEVICE_ID, tok);
   setUsers([adminUser]);
-  setSession({email:em,tok,base:currentBase,platform:currentPlatform,loginAt:Date.now()});
+  setSession(makeSession(em,tok,currentBase,currentPlatform));
   currentUser={email:em,role:'admin'};
   addSession({email:em,tok,base:currentBase});
   if(btn){btn.disabled=false;btn.textContent='Créer';}
@@ -1636,7 +1650,7 @@ async function doFirstLogin(){
   u.h=pwHash;u.status='active';
   setUserToken(u, DEVICE_ID, tok);
   setUsers(users);
-  setSession({email:em,tok,base:currentBase,platform:currentPlatform,loginAt:Date.now()});
+  setSession(makeSession(em,tok,currentBase,currentPlatform));
   currentUser={email:em,role:u.role||'user'};
   addSession({email:em,tok,base:currentBase});
   if(btn){btn.disabled=false;btn.textContent='Activer';}
@@ -1730,7 +1744,7 @@ async function doLogin(){
   setUserToken(u, DEVICE_ID, tok);
   await setUsers(users);
   const _loginAt = Date.now();
-  setSession({email:em,tok,base:currentBase,platform:currentPlatform,loginAt:_loginAt});
+  setSession(makeSession(em,tok,currentBase,currentPlatform,_loginAt));
   currentUser={email:em,role:u.role||'user'};
   addSession({email:em,tok,base:currentBase});
   if(btn){btn.disabled=false;btn.textContent=T().btnLogin||'Connexion';}
