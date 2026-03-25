@@ -4396,7 +4396,8 @@ function checkSaveBtnEI(){
 
 function toggleAttachZone(){
   const fg=document.getElementById('attachFg');
-  if(fg) fg.style.display=isInvestigType()?'':'none';
+  // Pièces jointes disponibles pour TOUS les types d'intervention
+  if(fg) fg.style.display=document.getElementById('iType')?.value?'':'none';
 }
 
 function handleDrop(e){
@@ -4521,7 +4522,9 @@ function openAddI(){
   pendingAttachments=[];
   const prev=document.getElementById('attachPreview');if(prev)prev.innerHTML='';
   const err=document.getElementById('attachErr');if(err)err.textContent='';
-  toggleAttachZone();
+  // Afficher la zone pièces jointes immédiatement (tous types)
+  const fg=document.getElementById('attachFg');
+  if(fg) fg.style.display='';
   toggleSimZone();
   checkSaveBtn();
   document.getElementById('moI').classList.add('open');
@@ -4593,11 +4596,9 @@ function cfaPrevEI(){
 }
 
 function toggleEditAttachZone(){
-  const tp=document.getElementById('eiType')?.value;
-  const cfg=getCfg();
-  const isOther=(cfg?.itypes||DEFAULT_ITYPES).find(t=>t.key===tp)?.group==='other';
+  // Pièces jointes disponibles pour TOUS les types d'intervention
   const fg=document.getElementById('eiAttachFg');
-  if(fg) fg.style.display=isOther?'':'none';
+  if(fg) fg.style.display=document.getElementById('eiType')?.value?'':'none';
 }
 
 function handleDropEI(e){
@@ -4669,7 +4670,9 @@ function openEditI(id){
   document.getElementById('eiSimOld').value=i.simOld||'';
   document.getElementById('eiSimNew').value=i.simNew||'';
   cfaPrevEI();
-  toggleEditAttachZone();
+  // Afficher la zone pièces jointes immédiatement (tous types)
+  const eiAttFg=document.getElementById('eiAttachFg');
+  if(eiAttFg) eiAttFg.style.display='';
   toggleSimZoneEI();
   checkSaveBtnEI();
   renderEditAttachPreview();
