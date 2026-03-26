@@ -554,6 +554,7 @@ tbody td{padding:11px 17px;font-size:12px;}
   <button class="tbtn" onclick="switchTab('bilan')" id="tabB">📊 Bilan</button>
   <button class="tbtn" onclick="switchTab('performance')" id="tabP">🏆 Performance</button>
   <button class="tbtn" onclick="switchTab('sim')" id="tabSIM">📱 SIM</button>
+  <button class="tbtn" onclick="switchTab('imei')" id="tabIMEI">📡 IMEI</button>
 </div>
 <div class="abody">
   <div class="sidebar">
@@ -567,6 +568,7 @@ tbody td{padding:11px 17px;font-size:12px;}
     <div id="tab-bilan" class="tp"><div id="bTabC"></div></div>
     <div id="tab-performance" class="tp"><div id="pTabC"></div></div>
     <div id="tab-sim" class="tp"><div id="simTabC"></div></div>
+    <div id="tab-imei" class="tp"><div id="imeiTabC"></div></div>
   </div>
 </div>
 
@@ -592,9 +594,14 @@ tbody td{padding:11px 17px;font-size:12px;}
 <div class="mo" id="moI"><div class="md">
   <h2 id="miT">Nouvelle intervention</h2>
   <div class="fg"><label id="miLd">Date</label><input type="date" id="iDate"></div>
-  <div class="fg"><label id="miLt">Type d'intervention</label><select id="iType" onchange="toggleAttachZone();toggleSimZone();checkSaveBtn();"></select></div>
+  <div class="fg"><label id="miLt">Type d'intervention</label><select id="iType" onchange="toggleAttachZone();toggleSimZone();toggleImeiZone();checkSaveBtn();"></select></div>
   <div class="fg"><label id="miLde">Description (optionnel)</label><input type="text" id="iDesc"></div>
   <div class="fg"><label id="miLte">Technicien <span style="color:var(--red)">*</span></label><input type="text" id="iTech" placeholder="Nom du technicien (obligatoire)" list="techList" oninput="checkSaveBtn()"><datalist id="techList"></datalist></div>
+  <div class="fg" id="imeiFg" style="display:none;">
+    <label style="color:#4a9eff;font-weight:700">📡 IMEI <span style="color:var(--red)">*</span></label>
+    <input type="text" id="iImei" placeholder="Ex: 123456789012345 (15 chiffres)" maxlength="15" oninput="this.value=this.value.replace(/[^0-9]/g,'');checkSaveBtn()" style="width:100%;box-sizing:border-box;font-family:'DM Mono',monospace;letter-spacing:1px;">
+    <div id="imeiErr" style="font-size:11px;color:var(--red);margin-top:3px;min-height:14px;"></div>
+  </div>
   <div class="fg" id="simFg" style="display:none;">
     <label style="color:var(--accent);font-weight:700">📱 Remplacement SIM</label>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:6px;">
@@ -629,9 +636,14 @@ tbody td{padding:11px 17px;font-size:12px;}
 <div class="mo" id="moEI"><div class="md">
   <h2 id="meiT">Modifier l'intervention</h2>
   <div class="fg"><label id="meiLd">Date</label><input type="date" id="eiDate"></div>
-  <div class="fg"><label id="meiLt">Type d'intervention</label><select id="eiType" onchange="toggleEditAttachZone();toggleSimZoneEI();checkSaveBtnEI();"></select></div>
+  <div class="fg"><label id="meiLt">Type d'intervention</label><select id="eiType" onchange="toggleEditAttachZone();toggleSimZoneEI();toggleImeiZoneEI();checkSaveBtnEI();"></select></div>
   <div class="fg"><label id="meiLde">Description (optionnel)</label><input type="text" id="eiDesc"></div>
   <div class="fg"><label id="meiLte">Technicien <span style="color:var(--red)">*</span></label><input type="text" id="eiTech" placeholder="Nom du technicien (obligatoire)" list="techListEI" oninput="checkSaveBtnEI()"><datalist id="techListEI"></datalist></div>
+  <div class="fg" id="eiImeiFg" style="display:none;">
+    <label style="color:#4a9eff;font-weight:700">📡 IMEI <span style="color:var(--red)">*</span></label>
+    <input type="text" id="eiImei" placeholder="Ex: 123456789012345 (15 chiffres)" maxlength="15" oninput="this.value=this.value.replace(/[^0-9]/g,'');checkSaveBtnEI()" style="width:100%;box-sizing:border-box;font-family:'DM Mono',monospace;letter-spacing:1px;">
+    <div id="eiImeiErr" style="font-size:11px;color:var(--red);margin-top:3px;min-height:14px;"></div>
+  </div>
   <div class="fg" id="eiSimFg" style="display:none;">
     <label style="color:var(--accent);font-weight:700">📱 Remplacement SIM</label>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:6px;">
@@ -3237,13 +3249,14 @@ function populateSels(){
 function switchTab(tab){
   curTab=tab;
   localStorage.setItem('sgo_tab', tab); // Sauvegarder l'onglet actif
-  document.querySelectorAll('.tbtn').forEach((b,i)=>b.classList.toggle('active',['flotte','interventions','bilan','performance','sim'][i]===tab));
+  document.querySelectorAll('.tbtn').forEach((b,i)=>b.classList.toggle('active',['flotte','interventions','bilan','performance','sim','imei'][i]===tab));
   document.querySelectorAll('.tp').forEach(p=>p.classList.remove('active'));
   document.getElementById('tab-'+tab).classList.add('active');
   if(tab==='interventions')renderIT();
   if(tab==='bilan')renderBT();
   if(tab==='performance')renderPT();
   if(tab==='sim')renderSIMTab();
+  if(tab==='imei')renderIMEITab();
 }
 
 function initYear(){
@@ -3520,6 +3533,126 @@ function renderSIMTab(){
     const newInput = document.getElementById('simSearchInput');
     if(newInput){ newInput.focus(); if(cursorPos!==null) newInput.setSelectionRange(cursorPos,cursorPos); }
   }
+}
+
+
+// ════════════════════════════════════════════════════════
+// ONGLET IMEI — Suivi des IMEI installés/désinstallés
+// ════════════════════════════════════════════════════════
+let imeiSort = {col:'date', dir:'desc'};
+let imeiSearch = '';
+let imeiFilter = 'all'; // 'all' | 'install' | 'desinstall'
+
+function renderIMEITab(){
+  const el = document.getElementById('imeiTabC');
+  if(!el) return;
+
+  const cfg = getCfg();
+  const itypes = cfg?.itypes || DEFAULT_ITYPES;
+
+  // Toutes les interventions avec IMEI
+  const all = data.interventions.filter(i => i.imei);
+
+  // Appliquer filtre
+  let list = all;
+  if(imeiFilter === 'install'){
+    const installKeys = itypes.filter(t=>t.group==='install').map(t=>t.key);
+    list = list.filter(i => installKeys.includes(i.type));
+  } else if(imeiFilter === 'desinstall'){
+    const desKeys = itypes.filter(t=>t.group==='desinstall').map(t=>t.key);
+    list = list.filter(i => desKeys.includes(i.type));
+  }
+
+  // Recherche
+  const q = imeiSearch.toLowerCase().trim();
+  if(q) list = list.filter(i =>
+    (i.imei||'').toLowerCase().includes(q) ||
+    (i.tech||'').toLowerCase().includes(q) ||
+    (getVehicleName(i.vehicleId)||'').toLowerCase().includes(q) ||
+    (i.type||'').toLowerCase().includes(q)
+  );
+
+  // Tri
+  list = [...list].sort((a,b) => {
+    let va, vb;
+    if(imeiSort.col==='date')    { va=a.date; vb=b.date; }
+    else if(imeiSort.col==='imei')   { va=a.imei; vb=b.imei; }
+    else if(imeiSort.col==='vehicle'){ va=getVehicleName(a.vehicleId).toLowerCase(); vb=getVehicleName(b.vehicleId).toLowerCase(); }
+    else if(imeiSort.col==='type')   { va=a.type; vb=b.type; }
+    else if(imeiSort.col==='tech')   { va=(a.tech||'').toLowerCase(); vb=(b.tech||'').toLowerCase(); }
+    else { va=''; vb=''; }
+    const cmp = va < vb ? -1 : va > vb ? 1 : 0;
+    return imeiSort.dir === 'asc' ? cmp : -cmp;
+  });
+
+  // KPIs
+  const totalImei = all.length;
+  const installKeys = itypes.filter(t=>t.group==='install').map(t=>t.key);
+  const desKeys = itypes.filter(t=>t.group==='desinstall').map(t=>t.key);
+  const totalInstall = all.filter(i => installKeys.includes(i.type)).length;
+  const totalDesinstall = all.filter(i => desKeys.includes(i.type)).length;
+  const uniqueImeis = new Set(all.map(i=>i.imei)).size;
+
+  function imeiSortClick(col){
+    return `onclick="imeiSort.col==='${col}'?(imeiSort.dir=imeiSort.dir==='asc'?'desc':'asc'):(imeiSort.col='${col}',imeiSort.dir='desc');renderIMEITab()"`;
+  }
+  function arrow(col){
+    const cls = imeiSort.col===col ? (imeiSort.dir==='asc'?'sort-asc':'sort-desc') : '';
+    return `<span class="sort-arrow ${cls}"></span>`;
+  }
+
+  const rows = list.length ? list.map((i, idx) => {
+    const vname = getVehicleName(i.vehicleId);
+    const dateStr = i.date ? new Date(i.date).toLocaleDateString('fr-FR') : '—';
+    const itype = itypes.find(t=>t.key===i.type);
+    const grp = itype?.group;
+    const isInstall = grp === 'install';
+    const tCol = isInstall ? '#2ec97b' : '#e05a2b';
+    const icon = isInstall ? '📥' : '📤';
+    return `<tr>
+      <td style="font-family:'DM Mono',monospace;font-size:12px;font-weight:700;color:#4a9eff;letter-spacing:1px">${i.imei}</td>
+      <td style="font-weight:700">${vname}</td>
+      <td><span style="background:${tCol}22;color:${tCol};padding:2px 8px;border-radius:8px;font-size:10px;font-weight:800">${icon} ${isInstall?'Installation':'Désinstallation'}</span></td>
+      <td><span style="background:${itype?.color||'#888'}22;color:${itype?.color||'#888'};padding:2px 8px;border-radius:8px;font-size:10px">${i.type}</span></td>
+      <td>${i.tech ? `<span class="sim-tech-badge">${i.tech}</span>` : '<span style="color:var(--muted)">—</span>'}</td>
+      <td style="font-family:'DM Mono',monospace;color:var(--muted);font-size:11px">${dateStr}</td>
+    </tr>`;
+  }).join('') : `<tr><td colspan="6" class="sim-empty">📡 Aucun IMEI enregistré${q?' pour cette recherche':''}</td></tr>`;
+
+  el.innerHTML = `<div class="sim-wrap">
+    <div class="sim-kpi-row">
+      <div class="sim-kpi"><div class="sim-kpi-val">${totalImei}</div><div class="sim-kpi-lbl">IMEI enregistrés</div></div>
+      <div class="sim-kpi"><div class="sim-kpi-val" style="color:#4a9eff">${uniqueImeis}</div><div class="sim-kpi-lbl">IMEI uniques</div></div>
+      <div class="sim-kpi"><div class="sim-kpi-val" style="color:#2ec97b">${totalInstall}</div><div class="sim-kpi-lbl">Installations</div></div>
+      <div class="sim-kpi"><div class="sim-kpi-val" style="color:#e05a2b">${totalDesinstall}</div><div class="sim-kpi-lbl">Désinstallations</div></div>
+    </div>
+
+    <div class="sim-topbar">
+      <input class="sim-search" id="imeiSearchInput" type="text" placeholder="🔍  Rechercher IMEI, véhicule, technicien…"
+        value="${imeiSearch.replace(/"/g,'&quot;')}"
+        oninput="imeiSearch=this.value;renderIMEITab()">
+      <div class="sim-filter-group">
+        <button class="sim-chip ${imeiFilter==='all'?'active':''}" onclick="imeiFilter='all';renderIMEITab()">Tous</button>
+        <button class="sim-chip ${imeiFilter==='install'?'active':''}" onclick="imeiFilter='install';renderIMEITab()">Installations</button>
+        <button class="sim-chip ${imeiFilter==='desinstall'?'active':''}" onclick="imeiFilter='desinstall';renderIMEITab()">Désinstallations</button>
+      </div>
+      <span class="sim-count-badge">${list.length} résultat${list.length!==1?'s':''}</span>
+    </div>
+
+    <div class="sim-table-wrap">
+      <table class="sim-table">
+        <thead><tr>
+          <th class="sortable ${imeiSort.col==='imei'?(imeiSort.dir==='asc'?'sort-asc':'sort-desc'):''}" ${imeiSortClick('imei')}>IMEI${arrow('imei')}</th>
+          <th class="sortable ${imeiSort.col==='vehicle'?(imeiSort.dir==='asc'?'sort-asc':'sort-desc'):''}" ${imeiSortClick('vehicle')}>Véhicule${arrow('vehicle')}</th>
+          <th class="sortable ${imeiSort.col==='type'?(imeiSort.dir==='asc'?'sort-asc':'sort-desc'):''}" ${imeiSortClick('type')}>Action${arrow('type')}</th>
+          <th>Type</th>
+          <th class="sortable ${imeiSort.col==='tech'?(imeiSort.dir==='asc'?'sort-asc':'sort-desc'):''}" ${imeiSortClick('tech')}>Technicien${arrow('tech')}</th>
+          <th class="sortable ${imeiSort.col==='date'?(imeiSort.dir==='asc'?'sort-asc':'sort-desc'):''}" ${imeiSortClick('date')}>Date${arrow('date')}</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+  </div>`;
 }
 
 function renderSIMTable(){
@@ -4324,8 +4457,8 @@ function dC(id){const c=Chart.getChart(id);if(c)c.destroy();}
 
 // ══════════════ PIÈCES JOINTES ══════════════
 let pendingAttachments=[]; // [{name, type, data (base64), size}]
-const MAX_ATTACH_SIZE=5*1024*1024; // 5MB par fichier
-const MAX_TOTAL_SIZE=8*1024*1024;  // 8MB total par intervention
+const MAX_ATTACH_SIZE=20*1024*1024; // 20MB par fichier
+const MAX_TOTAL_SIZE=30*1024*1024;  // 30MB total par intervention
 
 function isInvestigType(){
   const tp=document.getElementById('iType')?.value;
@@ -4334,6 +4467,39 @@ function isInvestigType(){
   return (cfg?.itypes||DEFAULT_ITYPES).find(t=>t.key===tp)?.group==='other';
 }
 
+
+// ══════ IMEI ZONE ══════
+function isInstallType(typeVal){
+  const v = typeVal || document.getElementById('iType')?.value || '';
+  const cfg = getCfg();
+  const itypes = cfg?.itypes || DEFAULT_ITYPES;
+  const found = itypes.find(t => t.key === v);
+  return found && (found.group === 'install' || found.group === 'desinstall');
+}
+function isInstallTypeEI(typeVal){
+  const v = typeVal || document.getElementById('eiType')?.value || '';
+  const cfg = getCfg();
+  const itypes = cfg?.itypes || DEFAULT_ITYPES;
+  const found = itypes.find(t => t.key === v);
+  return found && (found.group === 'install' || found.group === 'desinstall');
+}
+function toggleImeiZone(){
+  const fg = document.getElementById('imeiFg');
+  if(fg) fg.style.display = isInstallType() ? '' : 'none';
+  if(!isInstallType()){
+    const inp = document.getElementById('iImei');
+    if(inp) inp.value = '';
+    const err = document.getElementById('imeiErr');
+    if(err) err.textContent = '';
+  }
+}
+function toggleImeiZoneEI(){
+  const fg = document.getElementById('eiImeiFg');
+  if(fg) fg.style.display = isInstallTypeEI() ? '' : 'none';
+}
+function validateImei(val){
+  return /^\d{15}$/.test(val);
+}
 
 // ══════ SIM CARD ZONE + VALIDATION BOUTON ══════
 function isSimType(typeVal){
@@ -4375,7 +4541,12 @@ function checkSaveBtn(){
   const simRequired = isSimType();
   const simOld = document.getElementById('iSimOld')?.value.trim();
   const simNew = document.getElementById('iSimNew')?.value.trim();
-  const ok = tech && (!simRequired || (simOld && simNew));
+  const imeiRequired = isInstallType();
+  const imeiVal = document.getElementById('iImei')?.value.trim() || '';
+  const imeiOk = !imeiRequired || (imeiVal.length === 15 && /^[0-9]+$/.test(imeiVal));
+  const imeiErr = document.getElementById('imeiErr');
+  if(imeiErr) imeiErr.textContent = (imeiRequired && imeiVal && !imeiOk) ? 'IMEI invalide — 15 chiffres requis.' : '';
+  const ok = tech && (!simRequired || (simOld && simNew)) && imeiOk;
   btn.disabled = !ok;
   btn.style.opacity = ok ? '' : '0.4';
   btn.style.cursor = ok ? '' : 'not-allowed';
@@ -4387,7 +4558,12 @@ function checkSaveBtnEI(){
   const simRequired = isSimTypeEI();
   const simOld = document.getElementById('eiSimOld')?.value.trim();
   const simNew = document.getElementById('eiSimNew')?.value.trim();
-  const ok = tech && (!simRequired || (simOld && simNew));
+  const imeiRequired = isInstallTypeEI();
+  const imeiVal = document.getElementById('eiImei')?.value.trim() || '';
+  const imeiOk = !imeiRequired || (imeiVal.length === 15 && /^[0-9]+$/.test(imeiVal));
+  const imeiErr = document.getElementById('eiImeiErr');
+  if(imeiErr) imeiErr.textContent = (imeiRequired && imeiVal && !imeiOk) ? 'IMEI invalide — 15 chiffres requis.' : '';
+  const ok = tech && (!simRequired || (simOld && simNew)) && imeiOk;
   btn.disabled = !ok;
   btn.style.opacity = ok ? '' : '0.4';
   btn.style.cursor = ok ? '' : 'not-allowed';
@@ -4409,9 +4585,9 @@ function handleDrop(e){
 function handleFiles(files){
   const err=document.getElementById('attachErr');err.textContent='';
   Array.from(files).forEach(file=>{
-    if(file.size>MAX_ATTACH_SIZE){err.textContent=`"${file.name}" dépasse 5 MB.`;return;}
+    if(file.size>MAX_ATTACH_SIZE){err.textContent=`"${file.name}" dépasse 20 MB.`;return;}
     const totalSize=pendingAttachments.reduce((s,a)=>s+a.size,0)+file.size;
-    if(totalSize>MAX_TOTAL_SIZE){err.textContent='Taille totale max 8 MB atteinte.';return;}
+    if(totalSize>MAX_TOTAL_SIZE){err.textContent='Taille totale max 30 MB atteinte.';return;}
     if(pendingAttachments.find(a=>a.name===file.name)){return;}
     const reader=new FileReader();
     reader.onload=e=>{
@@ -4561,11 +4737,13 @@ function saveI(){
   const simOld=document.getElementById('iSimOld').value.trim();
   const simNew=document.getElementById('iSimNew').value.trim();
   if(simRequired&&(!simOld||!simNew)){alert('Les numéros SIM (ancien et nouveau) sont obligatoires.');return;}
-  const cfg=getCfg();
-  const isInvestig=(cfg?.itypes||DEFAULT_ITYPES).find(t=>t.key===tp)?.group==='other';
-  const attachments=isInvestig?[...pendingAttachments]:[];
+  const imeiRequired=isInstallType(tp);
+  const imeiVal=document.getElementById('iImei')?.value.trim()||'';
+  if(imeiRequired&&imeiVal.length!==15){alert('IMEI obligatoire — 15 chiffres requis pour installation/désinstallation.');return;}
+  const attachments=[...pendingAttachments];
   const iObj={id:uid(),vehicleId:selVid,date:d,type:tp,desc:de,cost:co,tech:tech||null,addedBy:currentUser?.email,attachments};
   if(simRequired){iObj.simOld=simOld;iObj.simNew=simNew;}
+  if(imeiRequired){iObj.imei=imeiVal;}
   data.interventions.push(iObj);
   pendingAttachments=[];
   closeMo('moI');curYear=new Date(d).getFullYear();render();
@@ -4610,9 +4788,9 @@ function handleDropEI(e){
 function handleFilesEI(files){
   const err=document.getElementById('eiAttachErr');err.textContent='';
   Array.from(files).forEach(file=>{
-    if(file.size>MAX_ATTACH_SIZE){err.textContent=`"${file.name}" dépasse 5 MB.`;return;}
+    if(file.size>MAX_ATTACH_SIZE){err.textContent=`"${file.name}" dépasse 20 MB.`;return;}
     const totalSize=editIAttachments.reduce((s,a)=>s+a.size,0)+file.size;
-    if(totalSize>MAX_TOTAL_SIZE){err.textContent='Taille totale max 8 MB atteinte.';return;}
+    if(totalSize>MAX_TOTAL_SIZE){err.textContent='Taille totale max 30 MB atteinte.';return;}
     if(editIAttachments.find(a=>a.name===file.name)) return;
     const reader=new FileReader();
     reader.onload=e=>{
@@ -4669,10 +4847,14 @@ function openEditI(id){
   document.getElementById('eiCost').value=i.cost||'';
   document.getElementById('eiSimOld').value=i.simOld||'';
   document.getElementById('eiSimNew').value=i.simNew||'';
+  const eiImeiInp=document.getElementById('eiImei');
+  if(eiImeiInp) eiImeiInp.value=i.imei||'';
   cfaPrevEI();
   // Afficher la zone pièces jointes immédiatement (tous types)
   const eiAttFg=document.getElementById('eiAttachFg');
   if(eiAttFg) eiAttFg.style.display='';
+  // Afficher zone IMEI si type install/désinstall
+  toggleImeiZoneEI();
   toggleSimZoneEI();
   checkSaveBtnEI();
   renderEditAttachPreview();
@@ -4698,10 +4880,12 @@ function saveEI(){
   const eiSimNew=document.getElementById('eiSimNew').value.trim();
   if(eiSimReq&&(!eiSimOld||!eiSimNew)){alert('Les numéros SIM (ancien et nouveau) sont obligatoires.');return;}
   if(eiSimReq){i.simOld=eiSimOld;i.simNew=eiSimNew;}else{delete i.simOld;delete i.simNew;}
+  const eiImeiReq=isInstallTypeEI(i.type);
+  const eiImeiVal=document.getElementById('eiImei')?.value.trim()||'';
+  if(eiImeiReq&&eiImeiVal.length!==15){alert('IMEI obligatoire — 15 chiffres requis.');return;}
+  if(eiImeiReq){i.imei=eiImeiVal;}else{delete i.imei;}
   i.cost=parseFloat(document.getElementById('eiCost').value)||0;
-  const cfg=getCfg();
-  const isOther=(cfg?.itypes||DEFAULT_ITYPES).find(t=>t.key===i.type)?.group==='other';
-  i.attachments=isOther?[...editIAttachments]:[];
+  i.attachments=[...editIAttachments];
   i.editedBy=currentUser?.email;
   i.editedAt=new Date().toISOString();
   try{saveD();}catch(e){alert('Stockage insuffisant.');return;}
