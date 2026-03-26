@@ -1524,7 +1524,10 @@ async function showLogin(){
     if(fbUsers && Array.isArray(fbUsers) && fbUsers.length) _usersCache = fbUsers;
   }
   const users=getUsers();
-  if(!users.length){
+  // N'afficher scrSetup QUE si authentifié ET DB vraiment vide
+  // Sans token → toujours login (le nouvel utilisateur a été invité)
+  const hasToken = !!(await getFbToken().catch(()=>null));
+  if(!users.length && hasToken){
     document.getElementById('scrSetup').classList.add('on');
   } else {
     document.getElementById('li_email').value='';
@@ -2876,7 +2879,12 @@ async function bootAfterPlatform(){
     if(fbUsers && Array.isArray(fbUsers) && fbUsers.length) _usersCache = fbUsers;
   }
   const users = getUsers();
-  if(!users.length){ document.getElementById('scrSetup').classList.add('on'); return; }
+  // N'afficher scrSetup QUE si authentifié ET DB vraiment vide
+  // Un nouveau user sans token doit voir scrLogin, pas scrSetup
+  const hasToken = !!(await getFbToken().catch(()=>null));
+  if(!users.length && hasToken){
+    document.getElementById('scrSetup').classList.add('on'); return;
+  }
   document.getElementById('scrLogin').classList.add('on');
   startLockUI();
 }
