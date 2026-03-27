@@ -4271,8 +4271,9 @@ function renderSB(){
   list.innerHTML=fil.map(v=>{
     const cnt=data.interventions.filter(i=>i.vehicleId===v.id&&new Date(i.date).getFullYear()===curYear).length;
     const unin=isUninstalled(v.id);
+    const vNum = v.num ? `<span style="font-family:'DM Mono',monospace;font-size:9px;font-weight:700;color:var(--accent);background:rgba(240,165,0,.12);padding:1px 6px;border-radius:5px;margin-right:5px;">#${v.num}</span>` : '';
     return `<div class="vi ${v.id===selVid?'active':''} ${unin?'vi-unin':''}" onclick="selV('${v.id}')">
-      <div class="vn" style="${unin?'color:var(--muted)':''}">${v.name}${unin?' <span style="font-size:9px;font-weight:700;color:#e74c3c;background:rgba(231,76,60,.12);padding:1px 6px;border-radius:6px;letter-spacing:.5px">DÉSINSTALLÉ</span>':''}</div>
+      <div class="vn" style="${unin?'color:var(--muted)':''}">${vNum}${v.name}${unin?' <span style="font-size:9px;font-weight:700;color:#e74c3c;background:rgba(231,76,60,.12);padding:1px 6px;border-radius:6px;letter-spacing:.5px">DÉSINSTALLÉ</span>':''}</div>
       <div class="vm"><span>${v.plate}</span><span>·</span><span>${v.type}</span></div>
       ${cnt>0?`<div class="vct" style="${unin?'background:var(--muted)':''}">${cnt}</div>`:''}
     </div>`;
@@ -4368,7 +4369,7 @@ function renderDet(id){
     <div class="vh" style="${isUninstalled(id)?'opacity:.7':''}">
       <div>
         <div class="vt" style="${isUninstalled(id)?'color:var(--muted)':''}">
-          ${v.name}
+          ${v.num?`<span style="font-family:'DM Mono',monospace;font-size:14px;font-weight:700;color:var(--accent);background:rgba(240,165,0,.12);padding:2px 9px;border-radius:6px;margin-right:8px;">#${v.num}</span>`:''}${v.name}
           ${isUninstalled(id)?'<span style="font-size:11px;font-weight:700;color:#e74c3c;background:rgba(231,76,60,.1);padding:2px 9px;border-radius:8px;margin-left:9px;letter-spacing:.5px">DÉSINSTALLÉ</span>':''}
         </div>
         <div class="vs">${v.plate} · ${v.type}</div>
@@ -4767,13 +4768,21 @@ function openAddI(){
 }
 function closeMo(id){document.getElementById(id).classList.remove('open');}
 
+// Obtenir le prochain numéro séquentiel de véhicule
+function getNextVehicleNum(){
+  if(!data.vehicles.length) return 1;
+  const maxNum = Math.max(...data.vehicles.map(v => v.num || 0));
+  return maxNum + 1;
+}
+
 async function saveV(){ if(!canDo('createVehicle')){alert('Accès refusé.');return;}
   const n=document.getElementById('vName').value.trim();
   const p=document.getElementById('vPlate').value.trim();
   const vs=document.getElementById('vType');
   const t=vs?.value||(lang==='en'?DEFAULT_VTYPES_EN[0]:DEFAULT_VTYPES_FR[0]);
   if(!n){alert(T().alertN);return;}
-  const v={id:uid(),name:n,plate:p,type:t,createdBy:currentUser?.email,createdAt:new Date().toISOString()};
+  const nextNum = getNextVehicleNum();
+  const v={id:uid(),num:nextNum,name:n,plate:p,type:t,createdBy:currentUser?.email,createdAt:new Date().toISOString()};
   data.vehicles.push(v);
   selVid=v.id;
   closeMo('moV');
