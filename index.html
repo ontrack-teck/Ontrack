@@ -3603,113 +3603,107 @@ let imeiFilter = 'all'; // 'all' | 'install' | 'desinstall'
 function renderIMEITab(){
   const el = document.getElementById('imeiTabC');
   if(!el) return;
-
   const cfg = getCfg();
   const itypes = cfg?.itypes || DEFAULT_ITYPES;
-
-  // Toutes les interventions avec IMEI
   const all = data.interventions.filter(i => i.imei);
-
-  // Appliquer filtre
-  let list = all;
-  if(imeiFilter === 'install'){
-    const installKeys = itypes.filter(t=>t.group==='install').map(t=>t.key);
-    list = list.filter(i => installKeys.includes(i.type));
-  } else if(imeiFilter === 'desinstall'){
-    const desKeys = itypes.filter(t=>t.group==='desinstall').map(t=>t.key);
-    list = list.filter(i => desKeys.includes(i.type));
-  }
-
-  // Recherche
-  const q = imeiSearch.toLowerCase().trim();
-  if(q) list = list.filter(i =>
-    (i.imei||'').toLowerCase().includes(q) ||
-    (i.tech||'').toLowerCase().includes(q) ||
-    (getVehicleName(i.vehicleId)||'').toLowerCase().includes(q) ||
-    (i.type||'').toLowerCase().includes(q)
-  );
-
-  // Tri
-  list = [...list].sort((a,b) => {
-    let va, vb;
-    if(imeiSort.col==='date')    { va=a.date; vb=b.date; }
-    else if(imeiSort.col==='imei')   { va=a.imei; vb=b.imei; }
-    else if(imeiSort.col==='vehicle'){ va=getVehicleName(a.vehicleId).toLowerCase(); vb=getVehicleName(b.vehicleId).toLowerCase(); }
-    else if(imeiSort.col==='type')   { va=a.type; vb=b.type; }
-    else if(imeiSort.col==='tech')   { va=(a.tech||'').toLowerCase(); vb=(b.tech||'').toLowerCase(); }
-    else { va=''; vb=''; }
-    const cmp = va < vb ? -1 : va > vb ? 1 : 0;
-    return imeiSort.dir === 'asc' ? cmp : -cmp;
-  });
-
-  // KPIs
-  const totalImei = all.length;
   const installKeys = itypes.filter(t=>t.group==='install').map(t=>t.key);
   const desKeys = itypes.filter(t=>t.group==='desinstall').map(t=>t.key);
+  const totalImei = all.length;
   const totalInstall = all.filter(i => installKeys.includes(i.type)).length;
   const totalDesinstall = all.filter(i => desKeys.includes(i.type)).length;
   const uniqueImeis = new Set(all.map(i=>i.imei)).size;
-
-  function imeiSortClick(col){
-    return `onclick="imeiSort.col==='${col}'?(imeiSort.dir=imeiSort.dir==='asc'?'desc':'asc'):(imeiSort.col='${col}',imeiSort.dir='desc');renderIMEITab()"`;
+  // Construire la structure UNE SEULE FOIS — ensuite seul le tableau est re-rendu
+  if(!document.getElementById('imeiTableWrap')){
+    el.innerHTML = `<div class="sim-wrap">
+      <div class="sim-kpi-row">
+        <div class="sim-kpi"><div class="sim-kpi-val" id="imeiKpiTotal">${totalImei}</div><div class="sim-kpi-lbl">IMEI enregistres</div></div>
+        <div class="sim-kpi"><div class="sim-kpi-val" style="color:#4a9eff" id="imeiKpiUniq">${uniqueImeis}</div><div class="sim-kpi-lbl">IMEI uniques</div></div>
+        <div class="sim-kpi"><div class="sim-kpi-val" style="color:#2ec97b" id="imeiKpiInst">${totalInstall}</div><div class="sim-kpi-lbl">Installations</div></div>
+        <div class="sim-kpi"><div class="sim-kpi-val" style="color:#e05a2b" id="imeiKpiDes">${totalDesinstall}</div><div class="sim-kpi-lbl">Desinstallations</div></div>
+      </div>
+      <div class="sim-topbar">
+        <input class="sim-search" id="imeiSearchInput" type="text" placeholder="Rechercher IMEI, vehicule, technicien..." oninput="imeiSearch=this.value;renderIMEITable()">
+        <div class="sim-filter-group">
+          <button class="sim-chip active" id="imeiChipAll" onclick="imeiFilter='all';renderIMEITable()">Tous</button>
+          <button class="sim-chip" id="imeiChipInst" onclick="imeiFilter='install';renderIMEITable()">Installations</button>
+          <button class="sim-chip" id="imeiChipDes" onclick="imeiFilter='desinstall';renderIMEITable()">Desinstallations</button>
+        </div>
+        <span class="sim-count-badge" id="imeiCountBadge">0 resultat</span>
+      </div>
+      <div class="sim-table-wrap" id="imeiTableWrap"></div>
+    </div>`;
+  } else {
+    const upd=(id,v)=>{const e=document.getElementById(id);if(e)e.textContent=v;};
+    upd('imeiKpiTotal',totalImei);upd('imeiKpiUniq',uniqueImeis);
+    upd('imeiKpiInst',totalInstall);upd('imeiKpiDes',totalDesinstall);
   }
-  function arrow(col){
-    const cls = imeiSort.col===col ? (imeiSort.dir==='asc'?'sort-asc':'sort-desc') : '';
-    return `<span class="sort-arrow ${cls}"></span>`;
-  }
+  renderIMEITable();
+}
 
-  const rows = list.length ? list.map((i, idx) => {
-    const vname = getVehicleName(i.vehicleId);
-    const dateStr = i.date ? new Date(i.date).toLocaleDateString('fr-FR') : '—';
-    const itype = itypes.find(t=>t.key===i.type);
-    const grp = itype?.group;
-    const isInstall = grp === 'install';
-    const tCol = isInstall ? '#2ec97b' : '#e05a2b';
-    const icon = isInstall ? '📥' : '📤';
+function renderIMEITable(){
+  const tableWrap = document.getElementById('imeiTableWrap');
+  const badge = document.getElementById('imeiCountBadge');
+  if(!tableWrap){ renderIMEITab(); return; }
+  const cfg = getCfg();
+  const itypes = cfg?.itypes || DEFAULT_ITYPES;
+  const all = data.interventions.filter(i => i.imei);
+  let list = all;
+  if(imeiFilter==='install'){
+    const k=itypes.filter(t=>t.group==='install').map(t=>t.key);
+    list=list.filter(i=>k.includes(i.type));
+  } else if(imeiFilter==='desinstall'){
+    const k=itypes.filter(t=>t.group==='desinstall').map(t=>t.key);
+    list=list.filter(i=>k.includes(i.type));
+  }
+  const q=imeiSearch.toLowerCase().trim();
+  if(q) list=list.filter(i=>
+    (i.imei||'').toLowerCase().includes(q)||
+    (i.tech||'').toLowerCase().includes(q)||
+    (getVehicleName(i.vehicleId)||'').toLowerCase().includes(q)||
+    (i.type||'').toLowerCase().includes(q)
+  );
+  list=[...list].sort((a,b)=>{
+    if(imeiSort.col==='date') return imeiSort.dir==='asc'?new Date(a.date)-new Date(b.date):new Date(b.date)-new Date(a.date);
+    let va='',vb='';
+    if(imeiSort.col==='imei'){va=a.imei||'';vb=b.imei||'';}
+    else if(imeiSort.col==='vehicle'){va=getVehicleName(a.vehicleId).toLowerCase();vb=getVehicleName(b.vehicleId).toLowerCase();}
+    else if(imeiSort.col==='type'){va=a.type||'';vb=b.type||'';}
+    else if(imeiSort.col==='tech'){va=(a.tech||'').toLowerCase();vb=(b.tech||'').toLowerCase();}
+    return imeiSort.dir==='asc'?va.localeCompare(vb):vb.localeCompare(va);
+  });
+  // Chips
+  ['All','Inst','Des'].forEach((s,i)=>{
+    const c=document.getElementById('imeiChip'+s);
+    const v=['all','install','desinstall'][i];
+    if(c)c.classList.toggle('active',imeiFilter===v);
+  });
+  if(badge) badge.textContent=list.length+' resultat'+(list.length!==1?'s':'');
+  function sc(col){return `onclick="imeiSort.col==='${col}'?(imeiSort.dir=imeiSort.dir==='asc'?'desc':'asc'):(imeiSort.col='${col}',imeiSort.dir='desc');renderIMEITable()""`;}
+  function ar(col){const cls=imeiSort.col===col?(imeiSort.dir==='asc'?'sort-asc':'sort-desc'):'';return `<span class="sort-arrow ${cls}"></span>`;}
+  const rows=list.length?list.map(i=>{
+    const vname=getVehicleName(i.vehicleId);
+    const dateStr=i.date?new Date(i.date).toLocaleDateString('fr-FR'):'—';
+    const itype=itypes.find(t=>t.key===i.type);
+    const isInst=itype?.group==='install';
+    const tCol=isInst?'#2ec97b':'#e05a2b';
+    const icon=isInst?'📥':'📤';
     return `<tr>
       <td style="font-family:'DM Mono',monospace;font-size:12px;font-weight:700;color:#4a9eff;letter-spacing:1px">${i.imei}</td>
       <td style="font-weight:700">${vname}</td>
-      <td><span style="background:${tCol}22;color:${tCol};padding:2px 8px;border-radius:8px;font-size:10px;font-weight:800">${icon} ${isInstall?'Installation':'Désinstallation'}</span></td>
+      <td><span style="background:${tCol}22;color:${tCol};padding:2px 8px;border-radius:8px;font-size:10px;font-weight:800">${icon} ${isInst?'Installation':'Desinstallation'}</span></td>
       <td><span style="background:${itype?.color||'#888'}22;color:${itype?.color||'#888'};padding:2px 8px;border-radius:8px;font-size:10px">${i.type}</span></td>
-      <td>${i.tech ? `<span class="sim-tech-badge">${i.tech}</span>` : '<span style="color:var(--muted)">—</span>'}</td>
+      <td>${i.tech?`<span class="sim-tech-badge">${i.tech}</span>`:'<span style="color:var(--muted)">—</span>'}</td>
       <td style="font-family:'DM Mono',monospace;color:var(--muted);font-size:11px">${dateStr}</td>
     </tr>`;
-  }).join('') : `<tr><td colspan="6" class="sim-empty">📡 Aucun IMEI enregistré${q?' pour cette recherche':''}</td></tr>`;
-
-  el.innerHTML = `<div class="sim-wrap">
-    <div class="sim-kpi-row">
-      <div class="sim-kpi"><div class="sim-kpi-val">${totalImei}</div><div class="sim-kpi-lbl">IMEI enregistrés</div></div>
-      <div class="sim-kpi"><div class="sim-kpi-val" style="color:#4a9eff">${uniqueImeis}</div><div class="sim-kpi-lbl">IMEI uniques</div></div>
-      <div class="sim-kpi"><div class="sim-kpi-val" style="color:#2ec97b">${totalInstall}</div><div class="sim-kpi-lbl">Installations</div></div>
-      <div class="sim-kpi"><div class="sim-kpi-val" style="color:#e05a2b">${totalDesinstall}</div><div class="sim-kpi-lbl">Désinstallations</div></div>
-    </div>
-
-    <div class="sim-topbar">
-      <input class="sim-search" id="imeiSearchInput" type="text" placeholder="🔍  Rechercher IMEI, véhicule, technicien…"
-        value="${imeiSearch.replace(/"/g,'&quot;')}"
-        oninput="imeiSearch=this.value;renderIMEITab()">
-      <div class="sim-filter-group">
-        <button class="sim-chip ${imeiFilter==='all'?'active':''}" onclick="imeiFilter='all';renderIMEITab()">Tous</button>
-        <button class="sim-chip ${imeiFilter==='install'?'active':''}" onclick="imeiFilter='install';renderIMEITab()">Installations</button>
-        <button class="sim-chip ${imeiFilter==='desinstall'?'active':''}" onclick="imeiFilter='desinstall';renderIMEITab()">Désinstallations</button>
-      </div>
-      <span class="sim-count-badge">${list.length} résultat${list.length!==1?'s':''}</span>
-    </div>
-
-    <div class="sim-table-wrap">
-      <table class="sim-table">
-        <thead><tr>
-          <th class="sortable ${imeiSort.col==='imei'?(imeiSort.dir==='asc'?'sort-asc':'sort-desc'):''}" ${imeiSortClick('imei')}>IMEI${arrow('imei')}</th>
-          <th class="sortable ${imeiSort.col==='vehicle'?(imeiSort.dir==='asc'?'sort-asc':'sort-desc'):''}" ${imeiSortClick('vehicle')}>Véhicule${arrow('vehicle')}</th>
-          <th class="sortable ${imeiSort.col==='type'?(imeiSort.dir==='asc'?'sort-asc':'sort-desc'):''}" ${imeiSortClick('type')}>Action${arrow('type')}</th>
-          <th>Type</th>
-          <th class="sortable ${imeiSort.col==='tech'?(imeiSort.dir==='asc'?'sort-asc':'sort-desc'):''}" ${imeiSortClick('tech')}>Technicien${arrow('tech')}</th>
-          <th class="sortable ${imeiSort.col==='date'?(imeiSort.dir==='asc'?'sort-asc':'sort-desc'):''}" ${imeiSortClick('date')}>Date${arrow('date')}</th>
-        </tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
-    </div>
-  </div>`;
+  }).join(''):`<tr><td colspan="6" class="sim-empty">Aucun IMEI enregistre${q?' pour cette recherche':''}</td></tr>`;
+  tableWrap.innerHTML=`<table class="sim-table"><thead><tr>
+    <th class="sortable" ${sc('imei')}>IMEI${ar('imei')}</th>
+    <th class="sortable" ${sc('vehicle')}>Vehicule${ar('vehicle')}</th>
+    <th class="sortable" ${sc('type')}>Action${ar('type')}</th>
+    <th>Type</th>
+    <th class="sortable" ${sc('tech')}>Technicien${ar('tech')}</th>
+    <th class="sortable" ${sc('date')}>Date${ar('date')}</th>
+  </tr></thead><tbody>${rows}</tbody></table>`;
 }
 
 function renderSIMTable(){
