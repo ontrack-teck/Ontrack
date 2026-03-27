@@ -972,6 +972,55 @@ const LS={
   del:k=>localStorage.removeItem(k)
 };
 
+// ═══════════════════ CLOUDINARY ═════════════════════════
+const CLOUDINARY_CLOUD = 'dzdeh0hlp';
+const CLOUDINARY_PRESET = 'ontrack_uploads';
+const CLOUDINARY_URL = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}`;
+
+async function uploadToCloudinary(file){
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('upload_preset', CLOUDINARY_PRESET);
+  formData.append('folder', 'ontrack/' + currentBase);
+  // Déterminer le type de ressource
+  const isVideo = file.type.startsWith('video/');
+  const isPdf = file.type === 'application/pdf';
+  const isImage = file.type.startsWith('image/');
+  const resourceType = isVideo ? 'video' : (isImage ? 'image' : 'raw');
+  const r = await fetch(`${CLOUDINARY_URL}/${resourceType}/upload`, {
+    method: 'POST',
+    body: formData
+  });
+  if(!r.ok){
+    const err = await r.json();
+    throw new Error(err.error?.message || 'Upload échoué');
+  }
+  const d = await r.json();
+  return {
+    name: file.name,
+    type: file.type,
+    size: file.size,
+    url: d.secure_url,
+    publicId: d.public_id,
+    cloudinary: true
+  };
+}
+
+async function uploadFilesToCloudinary(files){
+  const results = [];
+  for(const f of files){
+    try{
+      const res = await uploadToCloudinary(f);
+      results.push(res);
+    } catch(e){
+      console.error('Cloudinary upload error:', f.name, e.message);
+      throw e;
+    }
+  }
+  return results;
+}
+// ══════════════════════════════════════════════════════
+
 // ═══════════════════ FIREBASE AUTH ══════════════════════
 const FIREBASE_API_KEY = 'AIzaSyDVo2twZMoX2mNWmZTY6vl467xlLIqLdtY';
 const FB_AUTH_URL = 'https://identitytoolkit.googleapis.com/v1';
@@ -4264,7 +4313,7 @@ function renderInterventionsPage(ii, isAdmin, L){
       const isPpt2=a.name&&a.name.match(/\.pptx?$/i);
       const icon=isImg?'🖼':isXls2?'📊':isPpt2?'📑':'📄';
       const cls=isImg?'attach-chip attach-chip-img':'attach-chip attach-chip-pdf';
-      return `<a class="${cls}" onclick="viewAttachment(data.interventions.find(x=>x.id==='${i.id}').attachments[${ai}].data,'${a.name}','${a.type}')" href="javascript:void(0)">${icon} ${a.name.length>14?a.name.substring(0,12)+'…':a.name}</a>`;
+      return `<a class="${cls}" onclick="viewAttachment(data.interventions.find(x=>x.id==='${i.id}').attachments[${ai}];const _src=_att?.url||_att?.data||'';return _src;})(data.interventions.find(x=>x.id==='${i.id}').attachments[${ai}]),'${a.name}','${a.type}')" href="javascript:void(0)">${icon} ${a.name.length>14?a.name.substring(0,12)+'…':a.name}</a>`;
     }).join(''):'';
     return `<tr>
       <td style="font-family:'DM Mono',monospace;font-size:11px">${new Date(i.date).toLocaleDateString(lang==='fr'?'fr-FR':'en-GB')}</td>
@@ -4590,20 +4639,31 @@ function handleDrop(e){
   handleFiles(e.dataTransfer.files);
 }
 
-function handleFiles(files){
+async function handleFiles(files){
   const err=document.getElementById('attachErr');err.textContent='';
-  Array.from(files).forEach(file=>{
-    if(file.size>MAX_ATTACH_SIZE){err.textContent=`"${file.name}" dépasse 20 MB.`;return;}
+  const zone=document.getElementById('attachZone');
+  const validFiles=[];
+  for(const file of Array.from(files)){
+    if(file.size>MAX_ATTACH_SIZE){err.textContent=`"${file.name}" dépasse 20 MB.`;continue;}
     const totalSize=pendingAttachments.reduce((s,a)=>s+a.size,0)+file.size;
-    if(totalSize>MAX_TOTAL_SIZE){err.textContent='Taille totale max 30 MB atteinte.';return;}
-    if(pendingAttachments.find(a=>a.name===file.name)){return;}
-    const reader=new FileReader();
-    reader.onload=e=>{
-      pendingAttachments.push({name:file.name,type:file.type,data:e.target.result,size:file.size});
-      renderAttachPreview();
-    };
-    reader.readAsDataURL(file);
-  });
+    if(totalSize>MAX_TOTAL_SIZE){err.textContent='Taille totale max 30 MB atteinte.';continue;}
+    if(pendingAttachments.find(a=>a.name===file.name)){continue;}
+    validFiles.push(file);
+  }
+  if(!validFiles.length) return;
+  // Afficher état upload
+  if(zone) zone.style.opacity='0.5';
+  err.textContent='⏳ Upload en cours...';err.style.color='var(--muted)';
+  try{
+    const uploaded = await uploadFilesToCloudinary(validFiles);
+    uploaded.forEach(f => pendingAttachments.push(f));
+    err.textContent='';err.style.color='';
+    renderAttachPreview();
+  } catch(e){
+    err.textContent='Erreur upload : '+e.message;err.style.color='var(--red)';
+  } finally {
+    if(zone) zone.style.opacity='';
+  }
 }
 
 function renderAttachPreview(){
@@ -4611,16 +4671,18 @@ function renderAttachPreview(){
   el.innerHTML=pendingAttachments.map((a,i)=>{
     const isImg=a.type&&a.type.startsWith('image/');
     const isPdf=a.type==='application/pdf';
-    const isXls=a.name.match(/\.xlsx?$|csv$/i);
-    const isPpt=a.name.match(/\.pptx?$/i);
-    const icon=isImg?`<img src="${a.data}" alt="${a.name}">`:isPdf?'<span class="attach-thumb-pdf">📄</span>':isXls?'<span style="font-size:28px">📊</span>':isPpt?'<span style="font-size:28px">📑</span>':'<span style="font-size:28px">📁</span>';
-    const kb=Math.round(a.size/1024);
+    const isXls=a.name&&a.name.match(/\.xlsx?$|csv$/i);
+    const isPpt=a.name&&a.name.match(/\.pptx?$/i);
+    // Utiliser url (Cloudinary) ou data (base64 ancien)
+    const src = a.url || a.data || '';
+    const icon=isImg?`<img src="${src}" alt="${a.name}">`:isPdf?'<span class="attach-thumb-pdf">📄</span>':isXls?'<span style="font-size:28px">📊</span>':isPpt?'<span style="font-size:28px">📑</span>':'<span style="font-size:28px">📁</span>';
+    const kb=Math.round((a.size||0)/1024);
     return `<div style="display:flex;flex-direction:column;align-items:center;gap:3px;">
       <div class="attach-thumb">
         ${icon}
         <button class="attach-rm" onclick="removeAttach(${i})">✕</button>
       </div>
-      <div class="attach-size">${kb}KB</div>
+      <div class="attach-size">${kb>0?kb+'KB':a.name.substring(0,10)}</div>
     </div>`;
   }).join('');
 }
@@ -4633,19 +4695,15 @@ function removeAttach(i){
 function fmtBytes(b){return b<1024?b+'B':b<1048576?(b/1024).toFixed(1)+'KB':(b/1048576).toFixed(1)+'MB';}
 
 function viewAttachment(data,name,type){
-  const isDocFile=!type||!type.startsWith('image/');
-  if(isDocFile){
-    // Télécharger PDF, Excel, PowerPoint, etc.
-    const link=document.createElement('a');
-    link.href=data;link.download=name;link.click();
-  } else if(type&&type.startsWith('image/')){
-    // Afficher dans la visionneuse
-    document.getElementById('viewerImg').src=data;
+  // data peut être une URL Cloudinary ou un data:// base64
+  const src = data || '';
+  if(type&&type.startsWith('image/')){
+    document.getElementById('viewerImg').src=src;
     document.getElementById('viewerName').textContent=name;
     document.getElementById('viewerMo').classList.add('open');
   } else {
-    const link=document.createElement('a');
-    link.href=data;link.download=name;link.click();
+    // Ouvrir dans un nouvel onglet (PDF, Excel, etc.)
+    window.open(src, '_blank');
   }
 }
 
@@ -4793,30 +4851,41 @@ function handleDropEI(e){
   handleFilesEI(e.dataTransfer.files);
 }
 
-function handleFilesEI(files){
+async function handleFilesEI(files){
   const err=document.getElementById('eiAttachErr');err.textContent='';
-  Array.from(files).forEach(file=>{
-    if(file.size>MAX_ATTACH_SIZE){err.textContent=`"${file.name}" dépasse 20 MB.`;return;}
+  const zone=document.getElementById('eiAttachZone');
+  const validFiles=[];
+  for(const file of Array.from(files)){
+    if(file.size>MAX_ATTACH_SIZE){err.textContent=`"${file.name}" dépasse 20 MB.`;continue;}
     const totalSize=editIAttachments.reduce((s,a)=>s+a.size,0)+file.size;
-    if(totalSize>MAX_TOTAL_SIZE){err.textContent='Taille totale max 30 MB atteinte.';return;}
-    if(editIAttachments.find(a=>a.name===file.name)) return;
-    const reader=new FileReader();
-    reader.onload=e=>{
-      editIAttachments.push({name:file.name,type:file.type,data:e.target.result,size:file.size});
-      renderEditAttachPreview();
-    };
-    reader.readAsDataURL(file);
-  });
+    if(totalSize>MAX_TOTAL_SIZE){err.textContent='Taille totale max 30 MB atteinte.';continue;}
+    if(editIAttachments.find(a=>a.name===file.name)) continue;
+    validFiles.push(file);
+  }
+  if(!validFiles.length) return;
+  if(zone) zone.style.opacity='0.5';
+  err.textContent='⏳ Upload en cours...';err.style.color='var(--muted)';
+  try{
+    const uploaded = await uploadFilesToCloudinary(validFiles);
+    uploaded.forEach(f => editIAttachments.push(f));
+    err.textContent='';err.style.color='';
+    renderEditAttachPreview();
+  } catch(e){
+    err.textContent='Erreur upload : '+e.message;err.style.color='var(--red)';
+  } finally {
+    if(zone) zone.style.opacity='';
+  }
 }
 
 function renderEditAttachPreview(){
   const el=document.getElementById('eiAttachPreview');if(!el)return;
   el.innerHTML=editIAttachments.map((a,i)=>{
     const isImg=a.type&&a.type.startsWith('image/');
-    const isXls=a.name.match(/\.xlsx?$|csv$/i);
-    const isPpt=a.name.match(/\.pptx?$/i);
-    const icon=isImg?`<img src="${a.data}" alt="${a.name}">`:isXls?'<span style="font-size:28px">📊</span>':isPpt?'<span style="font-size:28px">📑</span>':'<span class="attach-thumb-pdf">📄</span>';
-    const kb=Math.round(a.size/1024);
+    const isXls=a.name&&a.name.match(/\.xlsx?$|csv$/i);
+    const isPpt=a.name&&a.name.match(/\.pptx?$/i);
+    const src = a.url || a.data || '';
+    const icon=isImg?`<img src="${src}" alt="${a.name}">`:isXls?'<span style="font-size:28px">📊</span>':isPpt?'<span style="font-size:28px">📑</span>':'<span class="attach-thumb-pdf">📄</span>';
+    const kb=Math.round((a.size||0)/1024);
     return `<div style="display:flex;flex-direction:column;align-items:center;gap:3px;">
       <div class="attach-thumb">${icon}<button class="attach-rm" onclick="removeEditAttach(${i})">✕</button></div>
       <div class="attach-size">${kb}KB</div>
