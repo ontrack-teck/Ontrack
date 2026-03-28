@@ -2204,7 +2204,7 @@ function openAdm(){
 }
 function closeAdm(){document.getElementById('admO').classList.remove('open');}
 function switchAPTab(tab){
-  ['account','users','config'].forEach(t=>{
+  ['account','users','config','theme'].forEach(t=>{
     const pane=document.getElementById('pane'+t.charAt(0).toUpperCase()+t.slice(1));
     const btn=document.getElementById('apt'+t.charAt(0).toUpperCase()+t.slice(1));
     if(pane) pane.classList.toggle('active',t===tab);
