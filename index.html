@@ -810,6 +810,7 @@ tbody td{padding:11px 17px;font-size:12px;}
       <button class="ap-tab active" onclick="switchAPTab('account')" id="aptAcc">Mon compte</button>
       <button class="ap-tab" onclick="switchAPTab('users')" id="aptUsers">Utilisateurs</button>
       <button class="ap-tab" onclick="switchAPTab('config')" id="aptConfig">Configuration</button>
+      <button class="ap-tab" onclick="switchAPTab('theme')" id="aptTheme">🎨 Thème</button>
     </div>
     <!-- ACCOUNT PANE -->
     <div class="ap-pane active" id="paneAccount">
@@ -852,6 +853,100 @@ tbody td{padding:11px 17px;font-size:12px;}
         </div>
       </div>
     </div>
+    <!-- THEME PANE -->
+    <div class="ap-pane" id="paneTheme">
+      <div class="aps">
+        <div class="apst">🎨 Personnalisation du thème</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">
+          <div class="apf" style="margin:0">
+            <label>Fond principal</label>
+            <div style="display:flex;align-items:center;gap:8px;margin-top:4px;">
+              <input type="color" id="thBg" value="#0d0f14" oninput="applyThemeColor('--bg',this.value)" style="width:40px;height:32px;border:none;border-radius:6px;cursor:pointer;background:none;">
+              <span id="thBgVal" style="font-family:'DM Mono',monospace;font-size:11px;color:var(--muted)">#0d0f14</span>
+            </div>
+          </div>
+          <div class="apf" style="margin:0">
+            <label>Surface / Cartes</label>
+            <div style="display:flex;align-items:center;gap:8px;margin-top:4px;">
+              <input type="color" id="thSurface" value="#161922" oninput="applyThemeColor('--surface',this.value)" style="width:40px;height:32px;border:none;border-radius:6px;cursor:pointer;background:none;">
+              <span id="thSurfaceVal" style="font-family:'DM Mono',monospace;font-size:11px;color:var(--muted)">#161922</span>
+            </div>
+          </div>
+          <div class="apf" style="margin:0">
+            <label>Surface secondaire</label>
+            <div style="display:flex;align-items:center;gap:8px;margin-top:4px;">
+              <input type="color" id="thSurface2" value="#1e2330" oninput="applyThemeColor('--surface2',this.value)" style="width:40px;height:32px;border:none;border-radius:6px;cursor:pointer;background:none;">
+              <span id="thSurface2Val" style="font-family:'DM Mono',monospace;font-size:11px;color:var(--muted)">#1e2330</span>
+            </div>
+          </div>
+          <div class="apf" style="margin:0">
+            <label>Bordures</label>
+            <div style="display:flex;align-items:center;gap:8px;margin-top:4px;">
+              <input type="color" id="thBorder" value="#2a3045" oninput="applyThemeColor('--border',this.value)" style="width:40px;height:32px;border:none;border-radius:6px;cursor:pointer;background:none;">
+              <span id="thBorderVal" style="font-family:'DM Mono',monospace;font-size:11px;color:var(--muted)">#2a3045</span>
+            </div>
+          </div>
+          <div class="apf" style="margin:0">
+            <label>Couleur principale (accent)</label>
+            <div style="display:flex;align-items:center;gap:8px;margin-top:4px;">
+              <input type="color" id="thAccent" value="#f0a500" oninput="applyThemeColor('--accent',this.value)" style="width:40px;height:32px;border:none;border-radius:6px;cursor:pointer;background:none;">
+              <span id="thAccentVal" style="font-family:'DM Mono',monospace;font-size:11px;color:var(--muted)">#f0a500</span>
+            </div>
+          </div>
+          <div class="apf" style="margin:0">
+            <label>Texte principal</label>
+            <div style="display:flex;align-items:center;gap:8px;margin-top:4px;">
+              <input type="color" id="thText" value="#e8eaf0" oninput="applyThemeColor('--text',this.value)" style="width:40px;height:32px;border:none;border-radius:6px;cursor:pointer;background:none;">
+              <span id="thTextVal" style="font-family:'DM Mono',monospace;font-size:11px;color:var(--muted)">#e8eaf0</span>
+            </div>
+          </div>
+          <div class="apf" style="margin:0">
+            <label>Texte secondaire</label>
+            <div style="display:flex;align-items:center;gap:8px;margin-top:4px;">
+              <input type="color" id="thMuted" value="#7a8099" oninput="applyThemeColor('--muted',this.value)" style="width:40px;height:32px;border:none;border-radius:6px;cursor:pointer;background:none;">
+              <span id="thMutedVal" style="font-family:'DM Mono',monospace;font-size:11px;color:var(--muted)">#7a8099</span>
+            </div>
+          </div>
+          <div class="apf" style="margin:0">
+            <label>Couleur verte</label>
+            <div style="display:flex;align-items:center;gap:8px;margin-top:4px;">
+              <input type="color" id="thGreen" value="#2ec97b" oninput="applyThemeColor('--green',this.value)" style="width:40px;height:32px;border:none;border-radius:6px;cursor:pointer;background:none;">
+              <span id="thGreenVal" style="font-family:'DM Mono',monospace;font-size:11px;color:var(--muted)">#2ec97b</span>
+            </div>
+          </div>
+          <div class="apf" style="margin:0">
+            <label>Couleur bleue</label>
+            <div style="display:flex;align-items:center;gap:8px;margin-top:4px;">
+              <input type="color" id="thBlue" value="#4a9eff" oninput="applyThemeColor('--blue',this.value)" style="width:40px;height:32px;border:none;border-radius:6px;cursor:pointer;background:none;">
+              <span id="thBlueVal" style="font-family:'DM Mono',monospace;font-size:11px;color:var(--muted)">#4a9eff</span>
+            </div>
+          </div>
+          <div class="apf" style="margin:0">
+            <label>Couleur rouge</label>
+            <div style="display:flex;align-items:center;gap:8px;margin-top:4px;">
+              <input type="color" id="thRed" value="#e05a2b" oninput="applyThemeColor('--red',this.value)" style="width:40px;height:32px;border:none;border-radius:6px;cursor:pointer;background:none;">
+              <span id="thRedVal" style="font-family:'DM Mono',monospace;font-size:11px;color:var(--muted)">#e05a2b</span>
+            </div>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
+          <button class="apsave" onclick="saveTheme()">💾 Sauvegarder le thème</button>
+          <button class="apsave" onclick="resetTheme()" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);">↺ Réinitialiser</button>
+        </div>
+        <div class="apmsg" id="themeMsg" style="margin-top:8px;"></div>
+      </div>
+      <div class="aps">
+        <div class="apst">🎨 Thèmes prédéfinis</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button onclick="applyPreset('dark-gold')" style="background:#0d0f14;color:#f0a500;border:2px solid #f0a500;padding:8px 14px;border-radius:8px;cursor:pointer;font-family:'Syne',sans-serif;font-size:12px;font-weight:700;">🌑 Dark Gold</button>
+          <button onclick="applyPreset('dark-blue')" style="background:#0a0e1a;color:#4a9eff;border:2px solid #4a9eff;padding:8px 14px;border-radius:8px;cursor:pointer;font-family:'Syne',sans-serif;font-size:12px;font-weight:700;">🌊 Dark Blue</button>
+          <button onclick="applyPreset('dark-green')" style="background:#0a1a0e;color:#2ec97b;border:2px solid #2ec97b;padding:8px 14px;border-radius:8px;cursor:pointer;font-family:'Syne',sans-serif;font-size:12px;font-weight:700;">🌿 Dark Green</button>
+          <button onclick="applyPreset('dark-purple')" style="background:#0f0a1a;color:#9b6dff;border:2px solid #9b6dff;padding:8px 14px;border-radius:8px;cursor:pointer;font-family:'Syne',sans-serif;font-size:12px;font-weight:700;">🔮 Dark Purple</button>
+          <button onclick="applyPreset('dark-red')" style="background:#1a0a0a;color:#e05a2b;border:2px solid #e05a2b;padding:8px 14px;border-radius:8px;cursor:pointer;font-family:'Syne',sans-serif;font-size:12px;font-weight:700;">🔥 Dark Red</button>
+        </div>
+      </div>
+    </div>
+
     <!-- CONFIG PANE -->
     <div class="ap-pane" id="paneConfig">
 
@@ -1587,8 +1682,61 @@ async function showLogin(){
 }
 // ═══════════════════════════════════════════════════════
 
+
+// ═══════════════════ THÈME PERSONNALISABLE ═══════════════════
+const DEFAULT_THEME = {
+  '--bg':'#0d0f14','--surface':'#161922','--surface2':'#1e2330',
+  '--border':'#2a3045','--accent':'#f0a500','--text':'#e8eaf0',
+  '--muted':'#7a8099','--green':'#2ec97b','--blue':'#4a9eff','--red':'#e05a2b'
+};
+const PRESETS = {
+  'dark-gold':   {'--bg':'#0d0f14','--surface':'#161922','--surface2':'#1e2330','--border':'#2a3045','--accent':'#f0a500','--text':'#e8eaf0','--muted':'#7a8099','--green':'#2ec97b','--blue':'#4a9eff','--red':'#e05a2b'},
+  'dark-blue':   {'--bg':'#0a0e1a','--surface':'#111827','--surface2':'#1a2235','--border':'#1e3050','--accent':'#4a9eff','--text':'#e8eaf0','--muted':'#6b7a99','--green':'#2ec97b','--blue':'#74b9ff','--red':'#e05a2b'},
+  'dark-green':  {'--bg':'#0a1a0e','--surface':'#0f1f14','--surface2':'#162a1a','--border':'#1e3a25','--accent':'#2ec97b','--text':'#e8eaf0','--muted':'#6b8a70','--green':'#4ef09b','--blue':'#4a9eff','--red':'#e05a2b'},
+  'dark-purple': {'--bg':'#0f0a1a','--surface':'#161122','--surface2':'#1e1630','--border':'#2a2045','--accent':'#9b6dff','--text':'#e8eaf0','--muted':'#7a6a99','--green':'#2ec97b','--blue':'#4a9eff','--red':'#e05a2b'},
+  'dark-red':    {'--bg':'#1a0a0a','--surface':'#220f0f','--surface2':'#2a1515','--border':'#3a2020','--accent':'#e05a2b','--text':'#e8eaf0','--muted':'#99706a','--green':'#2ec97b','--blue':'#4a9eff','--red':'#ff4757'}
+};
+function applyThemeColor(varName, value){
+  document.documentElement.style.setProperty(varName, value);
+  const map={'--bg':'thBg','--surface':'thSurface','--surface2':'thSurface2','--border':'thBorder','--accent':'thAccent','--text':'thText','--muted':'thMuted','--green':'thGreen','--blue':'thBlue','--red':'thRed'};
+  const id=map[varName];
+  if(id){const inp=document.getElementById(id);const val=document.getElementById(id+'Val');if(inp)inp.value=value;if(val)val.textContent=value;}
+}
+function applyFullTheme(theme){ Object.entries(theme).forEach(([k,v])=>applyThemeColor(k,v)); }
+function applyPreset(name){
+  const theme=PRESETS[name];if(!theme)return;
+  applyFullTheme(theme);
+  const msg=document.getElementById('themeMsg');
+  if(msg){msg.textContent='Thème appliqué ! Cliquez Sauvegarder pour conserver.';msg.className='apmsg ok';setTimeout(()=>{msg.textContent='';msg.className='apmsg';},3000);}
+}
+function saveTheme(){
+  const theme={};
+  Object.keys(DEFAULT_THEME).forEach(k=>{theme[k]=getComputedStyle(document.documentElement).getPropertyValue(k).trim();});
+  localStorage.setItem('sgo_theme',JSON.stringify(theme));
+  const msg=document.getElementById('themeMsg');
+  if(msg){msg.textContent='Thème sauvegardé !';msg.className='apmsg ok';setTimeout(()=>{msg.textContent='';msg.className='apmsg';},2000);}
+}
+function resetTheme(){
+  applyFullTheme(DEFAULT_THEME);localStorage.removeItem('sgo_theme');
+  const msg=document.getElementById('themeMsg');
+  if(msg){msg.textContent='Thème réinitialisé.';msg.className='apmsg';setTimeout(()=>{msg.textContent='';msg.className='apmsg';},2000);}
+}
+function loadSavedTheme(){
+  try{const saved=localStorage.getItem('sgo_theme');if(saved){applyFullTheme(JSON.parse(saved));}}catch(e){}
+}
+function initThemePane(){
+  const map={'--bg':'thBg','--surface':'thSurface','--surface2':'thSurface2','--border':'thBorder','--accent':'thAccent','--text':'thText','--muted':'thMuted','--green':'thGreen','--blue':'thBlue','--red':'thRed'};
+  Object.entries(map).forEach(([varName,id])=>{
+    const val=getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
+    const inp=document.getElementById(id);const span=document.getElementById(id+'Val');
+    if(inp&&val)inp.value=val;if(span&&val)span.textContent=val;
+  });
+}
+// ══════════════════════════════════════════════════════════════
+
 let _fbConnInterval = null;
 async function boot(){
+  loadSavedTheme(); // Charger le thème sauvegardé immédiatement
   checkFBConnection();
   if(_fbConnInterval) clearInterval(_fbConnInterval);
   _fbConnInterval = setInterval(checkFBConnection, 10000);
@@ -1919,6 +2067,8 @@ function showApp(){
   safe2('aptConfig',el=>el.style.display=canDo('manageConfig')?'':'none');
   safe2('paneConfig',el=>el.style.display=canDo('manageConfig')?'':'none');
   safe2('paneUsers',el=>el.style.display=canDo('manageUsers')?'':'none');
+  safe2('aptTheme',el=>el.style.display=canDo('manageConfig')?'':'none');
+  safe2('paneTheme',el=>el.style.display=canDo('manageConfig')?'':'none');
   startInactivityWatch();
   startSessionExpiryWatch();
   startPresence();
@@ -2062,6 +2212,7 @@ function switchAPTab(tab){
   });
   if(tab==='users') renderUserList();
   if(tab==='config') renderConfigPane();
+  if(tab==='theme') initThemePane();
 }
 const admOel=document.getElementById('admO');
 if(admOel) admOel.addEventListener('click',e=>{if(e.target===admOel)closeAdm();});
