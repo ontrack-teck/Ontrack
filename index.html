@@ -1960,9 +1960,12 @@ async function doLogin(){
 
   // ── ÉTAPE 3 : Session ONTRACK ─────────────────────────────────────
   const tok=uid();
+  const _loginAt = Date.now();
+  // Sauvegarder la dernière connexion dans le profil utilisateur
+  u.lastLogin = new Date(_loginAt).toISOString();
+  u.lastLoginBase = currentBase;
   setUserToken(u, DEVICE_ID, tok);
   await setUsers(users);
-  const _loginAt = Date.now();
   setSession(makeSession(em,tok,currentBase,currentPlatform,_loginAt));
   currentUser={email:em,role:u.role||'user'};
   addSession({email:em,tok,base:currentBase});
@@ -2316,6 +2319,12 @@ async function renderUserList(){
           <span class="${u.status==='pending'?'pending-badge':u.status==='blocked'?'blocked-badge':'active-badge'}">${u.status==='pending'?L.statusPending:u.status==='blocked'?L.statusBlocked:L.statusActive}</span>
           ${u.status==='pending'?`<span style="font-size:11px;color:var(--muted)">${L.pendingHint}</span>`:''}
           ${u.status==='blocked'?`<span style="font-size:11px;color:var(--red)">${L.blockedHint}</span>`:''}
+        </div>
+        <div style="font-size:10px;color:var(--muted);margin-top:4px;font-family:'DM Mono',monospace;">
+          ${u.lastLogin
+            ? `🕐 ${new Date(u.lastLogin).toLocaleDateString('fr-FR')} à ${new Date(u.lastLogin).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})}${u.lastLoginBase?' — '+u.lastLoginBase:''}`
+            : '<span style="color:var(--border)">Jamais connecté</span>'
+          }
         </div>
       </div>
       <div style="display:flex;gap:6px;align-items:center;">
