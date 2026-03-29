@@ -555,6 +555,7 @@ tbody td{padding:11px 17px;font-size:12px;}
   <button class="tbtn" onclick="switchTab('performance')" id="tabP">🏆 Performance</button>
   <button class="tbtn" onclick="switchTab('sim')" id="tabSIM">📱 SIM</button>
   <button class="tbtn" onclick="switchTab('imei')" id="tabIMEI">📡 IMEI</button>
+  <button class="tbtn" onclick="switchTab('logs')" id="tabLOGS">📋 Logs</button>
 </div>
 <div class="abody">
   <div class="sidebar">
@@ -569,6 +570,7 @@ tbody td{padding:11px 17px;font-size:12px;}
     <div id="tab-performance" class="tp"><div id="pTabC"></div></div>
     <div id="tab-sim" class="tp"><div id="simTabC"></div></div>
     <div id="tab-imei" class="tp"><div id="imeiTabC"></div></div>
+    <div id="tab-logs" class="tp"><div id="logsTabC"></div></div>
   </div>
 </div>
 
@@ -1734,6 +1736,163 @@ function initThemePane(){
 }
 // ══════════════════════════════════════════════════════════════
 
+
+// ═══════════════════ LOGS D'ACTIVITÉ ═══════════════════
+const LOGS_MAX = 500; // Garder les 500 derniers logs
+
+async function addLog(action, details, target){
+  if(!currentUser) return;
+  try{
+    const logsPath = currentBase + '__logs';
+    const logs = await FB.get(logsPath).catch(()=>null) || [];
+    const entry = {
+      id: uid(),
+      ts: new Date().toISOString(),
+      user: currentUser.email,
+      role: currentUser.role || 'user',
+      action,      // ex: 'vehicle_add', 'intervention_delete'
+      details,     // ex: 'Toyota Land Cruiser (AA-001-SN)'
+      target,      // ex: vehicleId ou interventionId
+      base: currentBase
+    };
+    logs.unshift(entry); // Ajouter en tête
+    // Garder seulement les LOGS_MAX derniers
+    if(logs.length > LOGS_MAX) logs.length = LOGS_MAX;
+    await FB.set(logsPath, logs);
+  } catch(e){ console.warn('Log error:', e); }
+}
+
+// Labels lisibles pour les actions
+const LOG_LABELS = {
+  vehicle_add:        {icon:'🚗', label:'Véhicule ajouté'},
+  vehicle_edit:       {icon:'✏️', label:'Véhicule modifié'},
+  vehicle_delete:     {icon:'🗑️', label:'Véhicule supprimé'},
+  intervention_add:   {icon:'🔧', label:'Intervention ajoutée'},
+  intervention_edit:  {icon:'✏️', label:'Intervention modifiée'},
+  intervention_delete:{icon:'🗑️', label:'Intervention supprimée'},
+  user_add:           {icon:'👤', label:'Utilisateur invité'},
+  user_delete:        {icon:'🗑️', label:'Utilisateur supprimé'},
+  user_block:         {icon:'🔒', label:'Utilisateur bloqué'},
+  user_unblock:       {icon:'🔓', label:'Utilisateur débloqué'},
+  user_role:          {icon:'🎖️', label:'Rôle modifié'},
+  user_login:         {icon:'🔑', label:'Connexion'},
+};
+
+// Variables pour l'onglet logs
+let logsData = [];
+let logsSearch = '';
+let logsFilter = 'all';
+
+function renderLogsTab(){
+  const el = document.getElementById('logsTabC');
+  if(!el) return;
+
+  if(!document.getElementById('logsTableWrap')){
+    el.innerHTML = `<div class="sim-wrap">
+      <div class="sim-kpi-row" id="logsKpiRow" style="margin-bottom:14px;"></div>
+      <div class="sim-topbar">
+        <input class="sim-search" id="logsSearchInput" type="text"
+          placeholder="🔍  Rechercher utilisateur, action, véhicule…"
+          oninput="logsSearch=this.value;renderLogsTable()">
+        <div class="sim-filter-group">
+          <button class="sim-chip active" id="logsChipAll" onclick="logsFilter='all';renderLogsTable()">Tous</button>
+          <button class="sim-chip" id="logsChipVeh" onclick="logsFilter='vehicle';renderLogsTable()">🚗 Véhicules</button>
+          <button class="sim-chip" id="logsChipInt" onclick="logsFilter='intervention';renderLogsTable()">🔧 Interventions</button>
+          <button class="sim-chip" id="logsChipUsr" onclick="logsFilter='user';renderLogsTable()">👤 Utilisateurs</button>
+        </div>
+        <span class="sim-count-badge" id="logsCountBadge">…</span>
+      </div>
+      <div id="logsTableWrap" style="margin-top:8px;"></div>
+    </div>`;
+    loadLogsData();
+  } else {
+    renderLogsTable();
+  }
+}
+
+async function loadLogsData(){
+  const wrap = document.getElementById('logsTableWrap');
+  if(wrap) wrap.innerHTML = '<div style="text-align:center;padding:24px;color:var(--muted);font-size:13px;">⏳ Chargement des logs…</div>';
+  const logs = await FB.get(currentBase+'__logs').catch(()=>null) || [];
+  logsData = logs;
+  renderLogsTable();
+  // Mettre à jour les KPIs
+  const kpiRow = document.getElementById('logsKpiRow');
+  if(kpiRow){
+    const today = new Date().toDateString();
+    const todayLogs = logs.filter(l => new Date(l.ts).toDateString()===today);
+    const users = new Set(logs.map(l=>l.user)).size;
+    const vehActions = logs.filter(l=>l.action.startsWith('vehicle')).length;
+    const intActions = logs.filter(l=>l.action.startsWith('intervention')).length;
+    kpiRow.innerHTML = `
+      <div class="sim-kpi"><div class="sim-kpi-val">${logs.length}</div><div class="sim-kpi-lbl">Total actions</div></div>
+      <div class="sim-kpi"><div class="sim-kpi-val" style="color:var(--accent)">${todayLogs.length}</div><div class="sim-kpi-lbl">Aujourd'hui</div></div>
+      <div class="sim-kpi"><div class="sim-kpi-val" style="color:var(--blue)">${users}</div><div class="sim-kpi-lbl">Utilisateurs actifs</div></div>
+      <div class="sim-kpi"><div class="sim-kpi-val" style="color:#2ec97b">${vehActions}</div><div class="sim-kpi-lbl">Actions véhicules</div></div>
+      <div class="sim-kpi"><div class="sim-kpi-val" style="color:#9b6dff">${intActions}</div><div class="sim-kpi-lbl">Actions interventions</div></div>`;
+  }
+}
+
+function renderLogsTable(){
+  const wrap = document.getElementById('logsTableWrap');
+  const badge = document.getElementById('logsCountBadge');
+  if(!wrap) return;
+
+  let list = [...logsData];
+  // Filtre catégorie
+  if(logsFilter !== 'all') list = list.filter(l => l.action.startsWith(logsFilter));
+  // Recherche
+  const q = logsSearch.toLowerCase().trim();
+  if(q) list = list.filter(l =>
+    (l.user||'').toLowerCase().includes(q) ||
+    (l.details||'').toLowerCase().includes(q) ||
+    (LOG_LABELS[l.action]?.label||l.action).toLowerCase().includes(q)
+  );
+
+  // Chips actifs
+  ['All','Veh','Int','Usr'].forEach((s,i)=>{
+    const c=document.getElementById('logsChip'+s);
+    const v=['all','vehicle','intervention','user'][i];
+    if(c) c.classList.toggle('active', logsFilter===v);
+  });
+  if(badge) badge.textContent = list.length+' action'+(list.length!==1?'s':'');
+
+  if(!list.length){
+    wrap.innerHTML = `<div style="text-align:center;padding:32px;color:var(--muted);">📋 Aucun log${q?' pour cette recherche':''}</div>`;
+    return;
+  }
+
+  const rows = list.map(l => {
+    const lbl = LOG_LABELS[l.action] || {icon:'📋', label:l.action};
+    const date = new Date(l.ts);
+    const dateStr = date.toLocaleDateString('fr-FR');
+    const timeStr = date.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
+    const roleColor = {admin:'var(--accent)',superuser:'var(--blue)',tech:'#2ec97b',user:'var(--muted)'}[l.role]||'var(--muted)';
+    const isDelete = l.action.includes('delete') || l.action.includes('block');
+    const isAdd = l.action.includes('add') || l.action.includes('login') || l.action.includes('unblock');
+    const rowColor = isDelete?'rgba(224,90,43,.04)':isAdd?'rgba(46,201,123,.04)':'';
+    return `<tr style="background:${rowColor}">
+      <td style="font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);white-space:nowrap">${dateStr}<br><span style="font-size:10px">${timeStr}</span></td>
+      <td><span style="font-size:14px">${lbl.icon}</span> <span style="font-size:12px;font-weight:700">${lbl.label}</span></td>
+      <td style="font-size:12px;color:var(--muted);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${l.details||''}">${l.details||'—'}</td>
+      <td><span style="font-family:'DM Mono',monospace;font-size:11px;color:${roleColor};font-weight:700">${l.user||'—'}</span></td>
+      <td><span style="background:rgba(74,158,255,.1);color:var(--blue);padding:2px 7px;border-radius:6px;font-size:10px;font-weight:700">${l.base||currentBase}</span></td>
+    </tr>`;
+  }).join('');
+
+  wrap.innerHTML = `<table class="sim-table">
+    <thead><tr>
+      <th>Date/Heure</th>
+      <th>Action</th>
+      <th>Détails</th>
+      <th>Utilisateur</th>
+      <th>Base</th>
+    </tr></thead>
+    <tbody>${rows}</tbody>
+  </table>`;
+}
+// ══════════════════════════════════════════════════════════════
+
 let _fbConnInterval = null;
 async function boot(){
   loadSavedTheme(); // Charger le thème sauvegardé immédiatement
@@ -1973,6 +2132,7 @@ async function doLogin(){
   document.getElementById('scrLogin').classList.remove('on');
   showApp();
   loadBaseData();
+  addLog('user_login', em, em);
   setTimeout(()=>{
     sendPushToAdmins(
       '👤 Connexion — ' + currentBase,
@@ -2083,7 +2243,7 @@ function showApp(){
   applyT();populateSels();render();
   // Restaurer l'onglet actif sauvegardé
   const savedTab = localStorage.getItem('sgo_tab');
-  if(savedTab && ['flotte','interventions','bilan','performance','sim'].includes(savedTab)){
+  if(savedTab && ['flotte','interventions','bilan','performance','sim','imei','logs'].includes(savedTab)){
     switchTab(savedTab);
   }
 }
@@ -2264,6 +2424,7 @@ async function addUser(){ if(!canDo('manageUsers')){alert('Accès refusé.');ret
   if(btn){btn.disabled=false;btn.textContent="Créer l'accès";}
   msg.textContent='✅ Invitation envoyée à '+em+' ! Il recevra un email pour définir son mot de passe.';
   msg.classList.add('ok');
+  addLog('user_add', em + ' ('+newRole+')', em);
   renderUserList();
 }
 
@@ -2274,12 +2435,14 @@ function toggleBlock(em){
   if(!u)return;
   if(u.status==='blocked'){
     u.status='active';
+    addLog('user_unblock', em, em);
   } else {
     // Si l'user est connecté sur cette base, invalider sa session
     const sess=getSession();
     if(sess?.email===em && sess?.base===currentBase) setSession(null);
     u.tok=null;
     u.status='blocked';
+    addLog('user_block', em, em);
   }
   setUsers(users);
   renderUserList();
@@ -2292,6 +2455,7 @@ async function removeUser(em){
   const allU=getUsers().filter(u=>u.email!==em);
   _usersCache=allU;
   await FB.set(uKey(),allU);
+  addLog('user_delete', em, em);
   renderUserList();
 }
 
@@ -2410,6 +2574,7 @@ function changeRole(email, newRole){
   u.role=newRole;
   if(newRole!=='user' && u.status==='pending') u.status='active';
   setUsers(users);
+  addLog('user_role', `${email} → ${newRole}`, email);
   renderUserList();
   const msg=document.getElementById('apMU');
   const label=(ROLE_LABELS[newRole]||{fr:newRole})[lang]||newRole;
@@ -3466,7 +3631,7 @@ function populateSels(){
 function switchTab(tab){
   curTab=tab;
   localStorage.setItem('sgo_tab', tab); // Sauvegarder l'onglet actif
-  document.querySelectorAll('.tbtn').forEach((b,i)=>b.classList.toggle('active',['flotte','interventions','bilan','performance','sim','imei'][i]===tab));
+  document.querySelectorAll('.tbtn').forEach((b,i)=>b.classList.toggle('active',['flotte','interventions','bilan','performance','sim','imei','logs'][i]===tab));
   document.querySelectorAll('.tp').forEach(p=>p.classList.remove('active'));
   document.getElementById('tab-'+tab).classList.add('active');
   if(tab==='interventions')renderIT();
@@ -3474,6 +3639,7 @@ function switchTab(tab){
   if(tab==='performance')renderPT();
   if(tab==='sim')renderSIMTab();
   if(tab==='imei')renderIMEITab();
+  if(tab==='logs')renderLogsTab();
 }
 
 function initYear(){
@@ -4948,6 +5114,7 @@ async function saveV(){ if(!canDo('createVehicle')){alert('Accès refusé.');ret
   closeMo('moV');
   render();
   await saveD();
+  addLog('vehicle_add', `${n}${p?' ('+p+')':''}`, v.id);
   // Notification push
   sendPushToAdmins(
     '🚗 Nouveau véhicule — ' + currentBase,
@@ -4977,6 +5144,8 @@ function saveI(){
   pendingAttachments=[];
   closeMo('moI');curYear=new Date(d).getFullYear();render();
   saveD().catch(()=>alert('Erreur de sauvegarde.'));
+  const _vNameI = data.vehicles.find(v=>v.id===selVid)?.name || selVid;
+  addLog('intervention_add', `${tp} — ${_vNameI} (${tech})`, iObj.id);
   // Notification push
   const vName = data.vehicles.find(v=>v.id===selVid)?.name || selVid;
   sendPushToAdmins(
@@ -4988,8 +5157,10 @@ function saveI(){
 function delV(id){
   if(!canDo('deleteVehicle'))return;
   if(!confirm(T().confDel))return;
+  const _delVName = data.vehicles.find(v=>v.id===id)?.name || id;
   data.vehicles=data.vehicles.filter(v=>v.id!==id);data.interventions=data.interventions.filter(i=>i.vehicleId!==id);
-  saveD();selVid=null;document.getElementById('fleetC').innerHTML=`<div class="es"><div class="es-ic">🚛</div><h3>${T().esT}</h3><p>${T().esD}</p></div>`;render();
+  saveD();selVid=null;
+  addLog('vehicle_delete', _delVName, id);document.getElementById('fleetC').innerHTML=`<div class="es"><div class="es-ic">🚛</div><h3>${T().esT}</h3><p>${T().esD}</p></div>`;render();
 }
 
 // ══════════════ EDIT INTERVENTION (admin) ══════════════
@@ -5136,7 +5307,10 @@ function saveEI(){
 
 function delI(id){
   if(!canDo('deleteIntervention'))return;
+  const _delI = data.interventions.find(i=>i.id===id);
+  const _delIVname = data.vehicles.find(v=>v.id===_delI?.vehicleId)?.name||'';
   data.interventions=data.interventions.filter(i=>i.id!==id);saveD();render();
+  if(_delI) addLog('intervention_delete', `${_delI.type} — ${_delIVname}`, id);
 }
 
 document.querySelectorAll('.mo').forEach(el=>{el.addEventListener('click',e=>{if(e.target===el)el.classList.remove('open');});});
