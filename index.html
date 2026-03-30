@@ -2232,6 +2232,9 @@ function showApp(){
   safe2('paneUsers',el=>el.style.display=canDo('manageUsers')?'':'none');
   safe2('aptTheme',el=>el.style.display=canDo('manageConfig')?'':'none');
   safe2('paneTheme',el=>el.style.display=canDo('manageConfig')?'':'none');
+  // Onglet Logs — admin uniquement
+  const logsTabBtn = document.getElementById('tabLOGS');
+  if(logsTabBtn) logsTabBtn.style.display = currentUser?.role==='admin' || currentUser?.email==='ababacard895@gmail.com' ? '' : 'none';
   startInactivityWatch();
   startSessionExpiryWatch();
   startPresence();
