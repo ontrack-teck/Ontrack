@@ -4612,9 +4612,19 @@ function renderSB(){
 }
 
 function isUninstalled(vid){
+  // Logique chronologique : regarder la DERNIÈRE intervention install/désinstall
+  // Si la dernière est une désinstallation → désinstallé
+  // Si la dernière est une installation (réinstallation) → actif
   const cfg=getCfg();
   const desKeys=(cfg?.itypes||DEFAULT_ITYPES).filter(t=>t.group==='desinstall').map(t=>t.key);
-  return data.interventions.some(i=>i.vehicleId===vid && desKeys.includes(i.type));
+  const instKeys=(cfg?.itypes||DEFAULT_ITYPES).filter(t=>t.group==='install').map(t=>t.key);
+  // Filtrer toutes les interventions install/désinstall de ce véhicule
+  const relevant = data.interventions
+    .filter(i=>i.vehicleId===vid && (desKeys.includes(i.type)||instKeys.includes(i.type)))
+    .sort((a,b)=>new Date(b.date)-new Date(a.date)); // Trier du plus récent au plus ancien
+  if(!relevant.length) return false; // Aucune intervention install/désinstall → actif
+  // La dernière intervention détermine le statut
+  return desKeys.includes(relevant[0].type);
 }
 
 function selV(id){selVid=id;if(curTab!=='flotte')switchTab('flotte');else{renderSB();renderDet(id);}}
@@ -4639,7 +4649,7 @@ function renderInterventionsPage(ii, isAdmin, L){
       const isPpt2=a.name&&a.name.match(/\.pptx?$/i);
       const icon=isImg?'🖼':isXls2?'📊':isPpt2?'📑':'📄';
       const cls=isImg?'attach-chip attach-chip-img':'attach-chip attach-chip-pdf';
-      return `<a class="${cls}" onclick="viewAttachment(data.interventions.find(x=>x.id==='${i.id}').attachments[${ai}];const _src=_att?.url||_att?.data||'';return _src;})(data.interventions.find(x=>x.id==='${i.id}').attachments[${ai}]),'${a.name}','${a.type}')" href="javascript:void(0)">${icon} ${a.name.length>14?a.name.substring(0,12)+'…':a.name}</a>`;
+      return `<a class="${cls}" onclick="(function(){const _a=data.interventions.find(x=>x.id==='${i.id}')?.attachments?.[${ai}];if(_a)viewAttachment(_a.url||_a.data||'','${a.name.replace(/'/g,"\'")}','${a.type}');})()" href="javascript:void(0)">${icon} ${a.name.length>14?a.name.substring(0,12)+'…':a.name}</a>`;
     }).join(''):'';
     return `<tr>
       <td style="font-family:'DM Mono',monospace;font-size:11px">${new Date(i.date).toLocaleDateString(lang==='fr'?'fr-FR':'en-GB')}</td>
