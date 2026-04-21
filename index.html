@@ -554,7 +554,7 @@ tbody td{padding:11px 17px;font-size:12px;}
   <button class="tbtn" onclick="switchTab('bilan')" id="tabB">📊 Bilan</button>
   <button class="tbtn" onclick="switchTab('performance')" id="tabP">🏆 Performance</button>
   <button class="tbtn" onclick="switchTab('sim')" id="tabSIM">📱 SIM</button>
-  <button class="tbtn" onclick="switchTab('imei')" id="tabIMEI">📡 IMEI</button>
+  <button class="tbtn" onclick="switchTab('imei')" id="tabIMEI">📡 IMEI/Série</button>
   <button class="tbtn" onclick="switchTab('logs')" id="tabLOGS">📋 Logs</button>
 </div>
 <div class="abody">
@@ -596,13 +596,23 @@ tbody td{padding:11px 17px;font-size:12px;}
 <div class="mo" id="moI"><div class="md">
   <h2 id="miT">Nouvelle intervention</h2>
   <div class="fg"><label id="miLd">Date</label><input type="date" id="iDate"></div>
-  <div class="fg"><label id="miLt">Type d'intervention</label><select id="iType" onchange="toggleAttachZone();toggleSimZone();toggleImeiZone();checkSaveBtn();"></select></div>
+  <div class="fg"><label id="miLt">Type d'intervention</label><select id="iType" onchange="toggleAttachZone();toggleSimZone();toggleImeiZone();toggleSerialZone();checkSaveBtn();"></select></div>
   <div class="fg"><label id="miLde">Description (optionnel)</label><input type="text" id="iDesc"></div>
   <div class="fg"><label id="miLte">Technicien <span style="color:var(--red)">*</span></label><input type="text" id="iTech" placeholder="Nom du technicien (obligatoire)" list="techList" oninput="checkSaveBtn()"><datalist id="techList"></datalist></div>
   <div class="fg" id="imeiFg" style="display:none;">
     <label style="color:#4a9eff;font-weight:700">📡 IMEI <span style="color:var(--red)">*</span></label>
     <input type="text" id="iImei" placeholder="Ex: 123456789012345 (15 chiffres)" maxlength="15" oninput="this.value=this.value.replace(/[^0-9]/g,'');checkSaveBtn()" style="width:100%;box-sizing:border-box;font-family:'DM Mono',monospace;letter-spacing:1px;">
     <div id="imeiErr" style="font-size:11px;color:var(--red);margin-top:3px;min-height:14px;"></div>
+  </div>
+  <div class="fg" id="serialFg" style="display:none;">
+    <label style="color:#9b6dff;font-weight:700">🔖 Serial <span style="color:var(--red)">*</span></label>
+    <input type="text" id="iSerial" placeholder="Ex: SN1234567890 (10 car.)" maxlength="10" oninput="checkSaveBtn()" style="width:100%;box-sizing:border-box;font-family:'DM Mono',monospace;letter-spacing:1px;">
+    <div id="serialErr" style="font-size:11px;color:var(--red);margin-top:3px;min-height:14px;"></div>
+  </div>
+  <div class="fg" id="serialFg" style="display:none;">
+    <label style="color:#9b6dff;font-weight:700">🔢 Numéro de série <span style="color:var(--red)">*</span></label>
+    <input type="text" id="iSerial" placeholder="Ex: SN1234567890 (10 car.)" maxlength="10" oninput="checkSaveBtn()" style="width:100%;box-sizing:border-box;font-family:'DM Mono',monospace;letter-spacing:1px;text-transform:uppercase;">
+    <div id="serialErr" style="font-size:11px;color:var(--red);margin-top:3px;min-height:14px;"></div>
   </div>
   <div class="fg" id="simFg" style="display:none;">
     <label style="color:var(--accent);font-weight:700">📱 Remplacement SIM</label>
@@ -638,13 +648,23 @@ tbody td{padding:11px 17px;font-size:12px;}
 <div class="mo" id="moEI"><div class="md">
   <h2 id="meiT">Modifier l'intervention</h2>
   <div class="fg"><label id="meiLd">Date</label><input type="date" id="eiDate"></div>
-  <div class="fg"><label id="meiLt">Type d'intervention</label><select id="eiType" onchange="toggleEditAttachZone();toggleSimZoneEI();toggleImeiZoneEI();checkSaveBtnEI();"></select></div>
+  <div class="fg"><label id="meiLt">Type d'intervention</label><select id="eiType" onchange="toggleEditAttachZone();toggleSimZoneEI();toggleImeiZoneEI();toggleSerialZoneEI();checkSaveBtnEI();"></select></div>
   <div class="fg"><label id="meiLde">Description (optionnel)</label><input type="text" id="eiDesc"></div>
   <div class="fg"><label id="meiLte">Technicien <span style="color:var(--red)">*</span></label><input type="text" id="eiTech" placeholder="Nom du technicien (obligatoire)" list="techListEI" oninput="checkSaveBtnEI()"><datalist id="techListEI"></datalist></div>
   <div class="fg" id="eiImeiFg" style="display:none;">
     <label style="color:#4a9eff;font-weight:700">📡 IMEI <span style="color:var(--red)">*</span></label>
     <input type="text" id="eiImei" placeholder="Ex: 123456789012345 (15 chiffres)" maxlength="15" oninput="this.value=this.value.replace(/[^0-9]/g,'');checkSaveBtnEI()" style="width:100%;box-sizing:border-box;font-family:'DM Mono',monospace;letter-spacing:1px;">
     <div id="eiImeiErr" style="font-size:11px;color:var(--red);margin-top:3px;min-height:14px;"></div>
+  </div>
+  <div class="fg" id="eiSerialFg" style="display:none;">
+    <label style="color:#9b6dff;font-weight:700">🔖 Serial <span style="color:var(--red)">*</span></label>
+    <input type="text" id="eiSerial" placeholder="Ex: SN1234567890 (10 car.)" maxlength="10" oninput="checkSaveBtnEI()" style="width:100%;box-sizing:border-box;font-family:'DM Mono',monospace;letter-spacing:1px;">
+    <div id="eiSerialErr" style="font-size:11px;color:var(--red);margin-top:3px;min-height:14px;"></div>
+  </div>
+  <div class="fg" id="eiSerialFg" style="display:none;">
+    <label style="color:#9b6dff;font-weight:700">🔢 Numéro de série <span style="color:var(--red)">*</span></label>
+    <input type="text" id="eiSerial" placeholder="Ex: SN1234567890 (10 car.)" maxlength="10" oninput="checkSaveBtnEI()" style="width:100%;box-sizing:border-box;font-family:'DM Mono',monospace;letter-spacing:1px;text-transform:uppercase;">
+    <div id="eiSerialErr" style="font-size:11px;color:var(--red);margin-top:3px;min-height:14px;"></div>
   </div>
   <div class="fg" id="eiSimFg" style="display:none;">
     <label style="color:var(--accent);font-weight:700">📱 Remplacement SIM</label>
@@ -4017,16 +4037,18 @@ function renderIMEITable(){
     const tCol=isInst?'#2ec97b':'#e05a2b';
     const icon=isInst?'📥':'📤';
     return `<tr>
-      <td style="font-family:'DM Mono',monospace;font-size:12px;font-weight:700;color:#4a9eff;letter-spacing:1px">${i.imei}</td>
+      <td style="font-family:'DM Mono',monospace;font-size:12px;font-weight:700;color:#4a9eff;letter-spacing:1px">${i.imei||'—'}</td>
+      <td style="font-family:'DM Mono',monospace;font-size:12px;font-weight:700;color:#9b6dff;letter-spacing:1px">${i.serial||'—'}</td>
       <td style="font-weight:700">${vname}</td>
       <td><span style="background:${tCol}22;color:${tCol};padding:2px 8px;border-radius:8px;font-size:10px;font-weight:800">${icon} ${isInst?'Installation':'Desinstallation'}</span></td>
       <td><span style="background:${itype?.color||'#888'}22;color:${itype?.color||'#888'};padding:2px 8px;border-radius:8px;font-size:10px">${i.type}</span></td>
       <td>${i.tech?`<span class="sim-tech-badge">${i.tech}</span>`:'<span style="color:var(--muted)">—</span>'}</td>
       <td style="font-family:'DM Mono',monospace;color:var(--muted);font-size:11px">${dateStr}</td>
     </tr>`;
-  }).join(''):`<tr><td colspan="6" class="sim-empty">Aucun IMEI enregistre${q?' pour cette recherche':''}</td></tr>`;
+  }).join(''):`<tr><td colspan="7" class="sim-empty">Aucun IMEI enregistre${q?' pour cette recherche':''}</td></tr>`;
   tableWrap.innerHTML=`<table class="sim-table"><thead><tr>
     <th class="sortable" ${sc('imei')}>IMEI${ar('imei')}</th>
+    <th class="sortable" ${sc('serial')}>N° Série${ar('serial')}</th>
     <th class="sortable" ${sc('vehicle')}>Vehicule${ar('vehicle')}</th>
     <th class="sortable" ${sc('type')}>Action${ar('type')}</th>
     <th>Type</th>
@@ -4654,7 +4676,7 @@ function renderInterventionsPage(ii, isAdmin, L){
     return `<tr>
       <td style="font-family:'DM Mono',monospace;font-size:11px">${new Date(i.date).toLocaleDateString(lang==='fr'?'fr-FR':'en-GB')}</td>
       <td><span class="tag" style="background:${TC()[i.type]||'#888'}22;color:${TC()[i.type]||'#888'}">${i.type}</span></td>
-      <td style="color:var(--muted);font-size:11px">${i.desc||'—'}${i.simOld?`<div style="margin-top:4px;font-family:'DM Mono',monospace;font-size:10px;"><span style="color:var(--muted)">🔴 ${i.simOld}</span> → <span style="color:#2ec97b">🟢 ${i.simNew}</span></div>`:''}</td>
+      <td style="color:var(--muted);font-size:11px">${i.desc||'—'}${i.simOld?`<div style="margin-top:4px;font-family:'DM Mono',monospace;font-size:10px;"><span style="color:var(--muted)">🔴 ${i.simOld}</span> → <span style="color:#2ec97b">🟢 ${i.simNew}</span></div>`:''}${i.imei?`<div style="margin-top:3px;font-family:'DM Mono',monospace;font-size:10px;color:#4a9eff;">📡 ${i.imei}</div>`:''}${i.serial?`<div style="margin-top:1px;font-family:'DM Mono',monospace;font-size:10px;color:#9b6dff;">🔢 ${i.serial}</div>`:''}</td>
       <td style="font-size:11px;font-weight:600">${i.tech||'—'}</td>
       <td style="font-size:11px;line-height:1.6">${fD(i.cost)}</td>
       <td>${hasA?`<div class="attach-chips">${chips}</div>`:'—'}</td>
@@ -4890,6 +4912,36 @@ function toggleImeiZoneEI(){
   const fg = document.getElementById('eiImeiFg');
   if(fg) fg.style.display = isInstallTypeEI() ? '' : 'none';
 }
+function toggleSerialZone(){
+  const fg = document.getElementById('serialFg');
+  if(fg) fg.style.display = isInstallType() ? '' : 'none';
+  if(!isInstallType()){
+    const inp = document.getElementById('iSerial');
+    if(inp) inp.value = '';
+    const err = document.getElementById('serialErr');
+    if(err) err.textContent = '';
+  }
+}
+function toggleSerialZoneEI(){
+  const fg = document.getElementById('eiSerialFg');
+  if(fg) fg.style.display = isInstallTypeEI() ? '' : 'none';
+}
+
+// ══════ SERIAL ZONE ══════
+function toggleSerialZone(){
+  const fg = document.getElementById('serialFg');
+  if(fg) fg.style.display = isInstallType() ? '' : 'none';
+  if(!isInstallType()){
+    const inp = document.getElementById('iSerial');
+    if(inp) inp.value = '';
+    const err = document.getElementById('serialErr');
+    if(err) err.textContent = '';
+  }
+}
+function toggleSerialZoneEI(){
+  const fg = document.getElementById('eiSerialFg');
+  if(fg) fg.style.display = isInstallTypeEI() ? '' : 'none';
+}
 function validateImei(val){
   return /^\d{15}$/.test(val);
 }
@@ -4939,7 +4991,11 @@ function checkSaveBtn(){
   const imeiOk = !imeiRequired || (imeiVal.length === 15 && /^[0-9]+$/.test(imeiVal));
   const imeiErr = document.getElementById('imeiErr');
   if(imeiErr) imeiErr.textContent = (imeiRequired && imeiVal && !imeiOk) ? 'IMEI invalide — 15 chiffres requis.' : '';
-  const ok = tech && (!simRequired || (simOld && simNew)) && imeiOk;
+  const serialVal = document.getElementById('iSerial')?.value.trim() || '';
+  const serialOk = !imeiRequired || serialVal.length === 10;
+  const serialErr = document.getElementById('serialErr');
+  if(serialErr) serialErr.textContent = (imeiRequired && serialVal && !serialOk) ? 'Numéro de série invalide — 10 caractères requis.' : '';
+  const ok = tech && (!simRequired || (simOld && simNew)) && imeiOk && serialOk;
   btn.disabled = !ok;
   btn.style.opacity = ok ? '' : '0.4';
   btn.style.cursor = ok ? '' : 'not-allowed';
@@ -4956,7 +5012,11 @@ function checkSaveBtnEI(){
   const imeiOk = !imeiRequired || (imeiVal.length === 15 && /^[0-9]+$/.test(imeiVal));
   const imeiErr = document.getElementById('eiImeiErr');
   if(imeiErr) imeiErr.textContent = (imeiRequired && imeiVal && !imeiOk) ? 'IMEI invalide — 15 chiffres requis.' : '';
-  const ok = tech && (!simRequired || (simOld && simNew)) && imeiOk;
+  const eiSerialVal = document.getElementById('eiSerial')?.value.trim() || '';
+  const eiSerialOk = !imeiRequired || eiSerialVal.length === 10;
+  const eiSerialErr = document.getElementById('eiSerialErr');
+  if(eiSerialErr) eiSerialErr.textContent = (imeiRequired && eiSerialVal && !eiSerialOk) ? 'Numéro de série invalide — 10 caractères requis.' : '';
+  const ok = tech && (!simRequired || (simOld && simNew)) && imeiOk && eiSerialOk;
   btn.disabled = !ok;
   btn.style.opacity = ok ? '' : '0.4';
   btn.style.cursor = ok ? '' : 'not-allowed';
@@ -5100,10 +5160,14 @@ function openAddI(){
   pendingAttachments=[];
   const prev=document.getElementById('attachPreview');if(prev)prev.innerHTML='';
   const err=document.getElementById('attachErr');if(err)err.textContent='';
+  document.getElementById('iSerial')&&(document.getElementById('iSerial').value='');
+  document.getElementById('serialErr')&&(document.getElementById('serialErr').textContent='');
   // Afficher la zone pièces jointes immédiatement (tous types)
   const fg=document.getElementById('attachFg');
   if(fg) fg.style.display='';
   toggleSimZone();
+  toggleImeiZone();
+  toggleSerialZone();
   checkSaveBtn();
   document.getElementById('moI').classList.add('open');
 }
@@ -5151,10 +5215,12 @@ function saveI(){
   const imeiRequired=isInstallType(tp);
   const imeiVal=document.getElementById('iImei')?.value.trim()||'';
   if(imeiRequired&&imeiVal.length!==15){alert('IMEI obligatoire — 15 chiffres requis pour installation/désinstallation.');return;}
+  const serialVal=document.getElementById('iSerial')?.value.trim()||'';
+  if(imeiRequired&&serialVal.length!==10){alert('Numéro de série obligatoire — 10 caractères requis.');return;}
   const attachments=[...pendingAttachments];
   const iObj={id:uid(),vehicleId:selVid,date:d,type:tp,desc:de,cost:co,tech:tech||null,addedBy:currentUser?.email,attachments};
   if(simRequired){iObj.simOld=simOld;iObj.simNew=simNew;}
-  if(imeiRequired){iObj.imei=imeiVal;}
+  if(imeiRequired){iObj.imei=imeiVal;iObj.serial=serialVal.toUpperCase();}
   data.interventions.push(iObj);
   pendingAttachments=[];
   closeMo('moI');curYear=new Date(d).getFullYear();render();
@@ -5275,12 +5341,15 @@ function openEditI(id){
   document.getElementById('eiSimNew').value=i.simNew||'';
   const eiImeiInp=document.getElementById('eiImei');
   if(eiImeiInp) eiImeiInp.value=i.imei||'';
+  const eiSerialInp=document.getElementById('eiSerial');
+  if(eiSerialInp) eiSerialInp.value=i.serial||'';
   cfaPrevEI();
   // Afficher la zone pièces jointes immédiatement (tous types)
   const eiAttFg=document.getElementById('eiAttachFg');
   if(eiAttFg) eiAttFg.style.display='';
-  // Afficher zone IMEI si type install/désinstall
+  // Afficher zone IMEI et Serial si type install/désinstall
   toggleImeiZoneEI();
+  toggleSerialZoneEI();
   toggleSimZoneEI();
   checkSaveBtnEI();
   renderEditAttachPreview();
@@ -5309,7 +5378,9 @@ function saveEI(){
   const eiImeiReq=isInstallTypeEI(i.type);
   const eiImeiVal=document.getElementById('eiImei')?.value.trim()||'';
   if(eiImeiReq&&eiImeiVal.length!==15){alert('IMEI obligatoire — 15 chiffres requis.');return;}
-  if(eiImeiReq){i.imei=eiImeiVal;}else{delete i.imei;}
+  const eiSerialVal=document.getElementById('eiSerial')?.value.trim()||'';
+  if(eiImeiReq&&eiSerialVal.length!==10){alert('Numéro de série obligatoire — 10 caractères requis.');return;}
+  if(eiImeiReq){i.imei=eiImeiVal;i.serial=eiSerialVal.toUpperCase();}else{delete i.imei;delete i.serial;}
   i.cost=parseFloat(document.getElementById('eiCost').value)||0;
   i.attachments=[...editIAttachments];
   i.editedBy=currentUser?.email;
