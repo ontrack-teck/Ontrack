@@ -4912,10 +4912,21 @@ function toggleImeiZoneEI(){
   const fg = document.getElementById('eiImeiFg');
   if(fg) fg.style.display = isInstallTypeEI() ? '' : 'none';
 }
+// ADplus uniquement (Installation Kit ADplus + MIX4000 / Désinstallation ADplus + MIX4000)
+const ADPLUS_KEYS = ['Installation Kit ADplus + MIX4000', 'Désinstallation ADplus + MIX4000'];
+function isAdplusType(typeVal){
+  const v = typeVal || document.getElementById('iType')?.value || '';
+  return ADPLUS_KEYS.includes(v);
+}
+function isAdplusTypeEI(typeVal){
+  const v = typeVal || document.getElementById('eiType')?.value || '';
+  return ADPLUS_KEYS.includes(v);
+}
 function toggleSerialZone(){
   const fg = document.getElementById('serialFg');
-  if(fg) fg.style.display = isInstallType() ? '' : 'none';
-  if(!isInstallType()){
+  const show = isAdplusType();
+  if(fg) fg.style.display = show ? '' : 'none';
+  if(!show){
     const inp = document.getElementById('iSerial');
     if(inp) inp.value = '';
     const err = document.getElementById('serialErr');
@@ -4924,7 +4935,7 @@ function toggleSerialZone(){
 }
 function toggleSerialZoneEI(){
   const fg = document.getElementById('eiSerialFg');
-  if(fg) fg.style.display = isInstallTypeEI() ? '' : 'none';
+  if(fg) fg.style.display = isAdplusTypeEI() ? '' : 'none';
 }
 
 // ══════ SERIAL ZONE ══════
@@ -4992,7 +5003,7 @@ function checkSaveBtn(){
   const imeiErr = document.getElementById('imeiErr');
   if(imeiErr) imeiErr.textContent = (imeiRequired && imeiVal && !imeiOk) ? 'IMEI invalide — 15 chiffres requis.' : '';
   const serialVal = document.getElementById('iSerial')?.value.trim() || '';
-  const serialOk = !imeiRequired || serialVal.length === 10;
+  const serialOk = !isAdplusType() || serialVal.length === 10;
   const serialErr = document.getElementById('serialErr');
   if(serialErr) serialErr.textContent = (imeiRequired && serialVal && !serialOk) ? 'Numéro de série invalide — 10 caractères requis.' : '';
   const ok = tech && (!simRequired || (simOld && simNew)) && imeiOk && serialOk;
@@ -5013,7 +5024,7 @@ function checkSaveBtnEI(){
   const imeiErr = document.getElementById('eiImeiErr');
   if(imeiErr) imeiErr.textContent = (imeiRequired && imeiVal && !imeiOk) ? 'IMEI invalide — 15 chiffres requis.' : '';
   const eiSerialVal = document.getElementById('eiSerial')?.value.trim() || '';
-  const eiSerialOk = !imeiRequired || eiSerialVal.length === 10;
+  const eiSerialOk = !isAdplusTypeEI() || eiSerialVal.length === 10;
   const eiSerialErr = document.getElementById('eiSerialErr');
   if(eiSerialErr) eiSerialErr.textContent = (imeiRequired && eiSerialVal && !eiSerialOk) ? 'Numéro de série invalide — 10 caractères requis.' : '';
   const ok = tech && (!simRequired || (simOld && simNew)) && imeiOk && eiSerialOk;
