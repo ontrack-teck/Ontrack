@@ -5194,12 +5194,14 @@ function saveI(){
   const imeiRequired=isInstallType(tp);
   const imeiVal=document.getElementById('iImei')?.value.trim()||'';
   if(imeiRequired&&imeiVal.length!==15){alert('IMEI obligatoire — 15 chiffres requis pour installation/désinstallation.');return;}
+  const serialRequired=isAdplusType(tp);
   const serialVal=document.getElementById('iSerial')?.value.trim()||'';
-  if(imeiRequired&&serialVal.length!==10){alert('Numéro de série obligatoire — 10 caractères requis.');return;}
+  if(serialRequired&&serialVal.length!==10){alert('Numéro de série obligatoire — 10 caractères requis pour les kits ADplus.');return;}
   const attachments=[...pendingAttachments];
   const iObj={id:uid(),vehicleId:selVid,date:d,type:tp,desc:de,cost:co,tech:tech||null,addedBy:currentUser?.email,attachments};
   if(simRequired){iObj.simOld=simOld;iObj.simNew=simNew;}
-  if(imeiRequired){iObj.imei=imeiVal;iObj.serial=serialVal.toUpperCase();}
+  if(imeiRequired){iObj.imei=imeiVal;}
+  if(serialRequired&&serialVal){iObj.serial=serialVal.toUpperCase();}
   data.interventions.push(iObj);
   pendingAttachments=[];
   closeMo('moI');curYear=new Date(d).getFullYear();render();
@@ -5357,9 +5359,11 @@ function saveEI(){
   const eiImeiReq=isInstallTypeEI(i.type);
   const eiImeiVal=document.getElementById('eiImei')?.value.trim()||'';
   if(eiImeiReq&&eiImeiVal.length!==15){alert('IMEI obligatoire — 15 chiffres requis.');return;}
+  const eiSerialRequired=isAdplusTypeEI(i.type);
   const eiSerialVal=document.getElementById('eiSerial')?.value.trim()||'';
-  if(eiImeiReq&&eiSerialVal.length!==10){alert('Numéro de série obligatoire — 10 caractères requis.');return;}
-  if(eiImeiReq){i.imei=eiImeiVal;i.serial=eiSerialVal.toUpperCase();}else{delete i.imei;delete i.serial;}
+  if(eiSerialRequired&&eiSerialVal.length!==10){alert('Numéro de série obligatoire — 10 caractères requis pour les kits ADplus.');return;}
+  if(eiImeiReq){i.imei=eiImeiVal;}else{delete i.imei;}
+  if(eiSerialRequired&&eiSerialVal){i.serial=eiSerialVal.toUpperCase();}else if(!eiSerialRequired){delete i.serial;}
   i.cost=parseFloat(document.getElementById('eiCost').value)||0;
   i.attachments=[...editIAttachments];
   i.editedBy=currentUser?.email;
