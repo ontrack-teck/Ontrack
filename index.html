@@ -353,8 +353,8 @@ tbody td{padding:11px 17px;font-size:12px;}
 .sim-chip{background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:5px 14px;font-size:11px;font-weight:700;cursor:pointer;transition:all .15s;color:var(--muted);}
 .sim-chip.active{background:var(--accent);color:#000;border-color:var(--accent);}
 .sim-count-badge{margin-left:auto;font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);}
-.sim-table-wrap{background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden;}
-.sim-table{width:100%;border-collapse:collapse;}
+.sim-table-wrap{background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;}
+.sim-table{width:100%;border-collapse:collapse;min-width:700px;}
 .sim-table th{padding:10px 16px;text-align:left;font-size:9px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--muted);background:var(--surface2);border-bottom:1px solid var(--border);}
 .sim-table th.sortable{cursor:pointer;user-select:none;}
 .sim-table th.sortable:hover{color:var(--accent);}
