@@ -596,7 +596,14 @@ tbody td{padding:11px 17px;font-size:12px;}
 <div class="mo" id="moI"><div class="md">
   <h2 id="miT">Nouvelle intervention</h2>
   <div class="fg"><label id="miLd">Date</label><input type="date" id="iDate"></div>
-  <div class="fg"><label id="miLt">Type d'intervention</label><select id="iType" onchange="toggleAttachZone();toggleSimZone();toggleImeiZone();toggleSerialZone();checkSaveBtn();"></select></div>
+  <div class="fg"><label id="miLt">Type d'intervention</label><select id="iType" onchange="toggleAttachZone();toggleSimZone();toggleImeiZone();toggleSerialZone();toggleTransfertZone();checkSaveBtn();"></select></div>
+  <div class="fg" id="transfertFg" style="display:none;">
+    <label style="color:#ff9f43;font-weight:700">🔄 Véhicule source (A) <span style="color:var(--red)">*</span></label>
+    <select id="iTransfertSrc" onchange="onTransfertSrcChange()" style="width:100%;">
+      <option value="">— Sélectionner le véhicule source —</option>
+    </select>
+    <div id="transfertInfo" style="margin-top:8px;font-size:11px;color:var(--muted);font-family:'DM Mono',monospace;"></div>
+  </div>
   <div class="fg"><label id="miLde">Description (optionnel)</label><input type="text" id="iDesc"></div>
   <div class="fg"><label id="miLte">Technicien <span style="color:var(--red)">*</span></label><input type="text" id="iTech" placeholder="Nom du technicien (obligatoire)" list="techList" oninput="checkSaveBtn()"><datalist id="techList"></datalist></div>
   <div class="fg" id="imeiFg" style="display:none;">
@@ -1788,6 +1795,7 @@ const LOG_LABELS = {
   user_unblock:       {icon:'🔓', label:'Utilisateur débloqué'},
   user_role:          {icon:'🎖️', label:'Rôle modifié'},
   user_login:         {icon:'🔑', label:'Connexion'},
+  vehicle_transfert:  {icon:'🔄', label:'Transfert de balise'},
 };
 
 // Variables pour l'onglet logs
@@ -3544,7 +3552,7 @@ function deleteBase(i){
 // ══════════════════════════════════════════════
 
 // ── DEFAULT CONFIG (used if no custom config saved) ──
-const DEFAULT_ITYPES=[{"key": "Installation MIX4000", "color": "#f0a500", "group": "install"}, {"key": "Installation Kit ADplus + MIX4000", "color": "#ffcc44", "group": "install"}, {"key": "Installation REMORA", "color": "#4a9eff", "group": "install"}, {"key": "Installation GH 5200", "color": "#70a1ff", "group": "install"}, {"key": "Désinstallation MIX4000", "color": "#c0392b", "group": "desinstall"}, {"key": "Désinstallation ADplus + MIX4000", "color": "#e74c3c", "group": "desinstall"}, {"key": "Désinstallation REMORA", "color": "#d35400", "group": "desinstall"}, {"key": "SIM CARD 500Mo", "color": "#2ec97b", "group": "piece"}, {"key": "SIM CARD 2Go", "color": "#00c9b1", "group": "piece"}, {"key": "RELAIS", "color": "#e05a2b", "group": "piece"}, {"key": "BALISE", "color": "#ff6b9d", "group": "piece"}, {"key": "CAMÉRA", "color": "#9b6dff", "group": "piece"}, {"key": "SHOCKET", "color": "#ff4757", "group": "piece"}, {"key": "HARNAIS", "color": "#ff9f43", "group": "piece"}, {"key": "PANIC", "color": "#ee5a24", "group": "piece"}, {"key": "DSM", "color": "#a29bfe", "group": "piece"}, {"key": "Investigation", "color": "#747d8c", "group": "other"}];
+const DEFAULT_ITYPES=[{"key": "Installation MIX4000", "color": "#f0a500", "group": "install"}, {"key": "Installation Kit ADplus + MIX4000", "color": "#ffcc44", "group": "install"}, {"key": "Installation REMORA", "color": "#4a9eff", "group": "install"}, {"key": "Installation GH 5200", "color": "#70a1ff", "group": "install"}, {"key": "Désinstallation MIX4000", "color": "#c0392b", "group": "desinstall"}, {"key": "Désinstallation ADplus + MIX4000", "color": "#e74c3c", "group": "desinstall"}, {"key": "Désinstallation REMORA", "color": "#d35400", "group": "desinstall"}, {"key": "SIM CARD 500Mo", "color": "#2ec97b", "group": "piece"}, {"key": "SIM CARD 2Go", "color": "#00c9b1", "group": "piece"}, {"key": "RELAIS", "color": "#e05a2b", "group": "piece"}, {"key": "BALISE", "color": "#ff6b9d", "group": "piece"}, {"key": "CAMÉRA", "color": "#9b6dff", "group": "piece"}, {"key": "SHOCKET", "color": "#ff4757", "group": "piece"}, {"key": "HARNAIS", "color": "#ff9f43", "group": "piece"}, {"key": "PANIC", "color": "#ee5a24", "group": "piece"}, {"key": "DSM", "color": "#a29bfe", "group": "piece"}, {"key": "Investigation", "color": "#747d8c", "group": "other"}, {"key": "Transfert de balise", "color": "#ff9f43", "group": "transfert"}];
 const DEFAULT_VTYPES_FR=["Camion", "Fourgon", "Voiture", "Engin TP", "Remorque", "Autre"];
 const DEFAULT_VTYPES_EN=["Truck", "Van", "Car", "Heavy equipment", "Trailer", "Other"];
 
@@ -4875,6 +4883,86 @@ function isInvestigType(){
 }
 
 
+
+// ═══════════════════ TRANSFERT DE BALISE ═══════════════════
+function isTransfertType(typeVal){
+  const v = typeVal || document.getElementById('iType')?.value || '';
+  const cfg = getCfg();
+  const itypes = cfg?.itypes || DEFAULT_ITYPES;
+  return (itypes.find(t=>t.key===v)?.group === 'transfert');
+}
+
+function toggleTransfertZone(){
+  const fg = document.getElementById('transfertFg');
+  if(!fg) return;
+  const show = isTransfertType();
+  fg.style.display = show ? '' : 'none';
+  if(show){
+    // Remplir le select avec tous les véhicules installés
+    const sel = document.getElementById('iTransfertSrc');
+    if(!sel) return;
+    const installKeys = (getCfg()?.itypes||DEFAULT_ITYPES).filter(t=>t.group==='install').map(t=>t.key);
+    const desinstallKeys = (getCfg()?.itypes||DEFAULT_ITYPES).filter(t=>t.group==='desinstall').map(t=>t.key);
+    // Véhicules actifs (non désinstallés) sauf le véhicule courant
+    const activeVehicles = data.vehicles.filter(v => v.id !== selVid && !isUninstalled(v.id));
+    sel.innerHTML = '<option value="">— Sélectionner le véhicule source —</option>';
+    activeVehicles.forEach(v => {
+      const opt = document.createElement('option');
+      opt.value = v.id;
+      opt.textContent = `${v.num?'#'+v.num+' ':''}${v.name} (${v.plate||'—'})`;
+      sel.appendChild(opt);
+    });
+    document.getElementById('transfertInfo').textContent = '';
+  } else {
+    document.getElementById('transfertInfo').textContent = '';
+  }
+}
+
+function onTransfertSrcChange(){
+  const srcId = document.getElementById('iTransfertSrc')?.value;
+  const info = document.getElementById('transfertInfo');
+  if(!srcId || !info){ checkSaveBtn(); return; }
+  // Trouver la dernière installation du véhicule source
+  const installKeys = (getCfg()?.itypes||DEFAULT_ITYPES).filter(t=>t.group==='install').map(t=>t.key);
+  const lastInstall = data.interventions
+    .filter(i=>i.vehicleId===srcId && installKeys.includes(i.type) && i.imei)
+    .sort((a,b)=>new Date(b.date)-new Date(a.date))[0];
+  if(lastInstall){
+    // Auto-remplir l'IMEI
+    const imeiInp = document.getElementById('iImei');
+    if(imeiInp) imeiInp.value = lastInstall.imei || '';
+    const serialInp = document.getElementById('iSerial');
+    if(serialInp) serialInp.value = lastInstall.serial || '';
+    info.innerHTML = `✅ IMEI récupéré : <b style="color:#4a9eff">${lastInstall.imei}</b>${lastInstall.serial?' &nbsp;·&nbsp; Serial : <b style="color:#9b6dff">'+lastInstall.serial+'</b>':''}`;
+  } else {
+    info.textContent = '⚠️ Aucune installation trouvée sur ce véhicule.';
+  }
+  checkSaveBtn();
+}
+
+async function executeTransfert(srcVid, destVid, tech, date, desc, imei, serial){
+  // 1. Copier toutes les interventions de A vers B
+  const transferred = data.interventions
+    .filter(i => i.vehicleId === srcVid)
+    .map(i => ({...i, id: uid(), vehicleId: destVid, transferredFrom: srcVid, transferredAt: new Date().toISOString()}));
+  data.interventions.push(...transferred);
+
+  // 2. Créer une désinstallation automatique sur A
+  const desKey = (getCfg()?.itypes||DEFAULT_ITYPES).find(t=>t.group==='desinstall')?.key || 'Désinstallation MIX4000';
+  const desintervention = {
+    id: uid(), vehicleId: srcVid, date, type: desKey,
+    desc: `Transfert vers ${getVehicleName(destVid)}${desc?' — '+desc:''}`,
+    cost: 0, tech, addedBy: currentUser?.email, attachments: [],
+    imei: imei || '', autoTransfert: true
+  };
+  data.interventions.push(desintervention);
+
+  // 3. Sauvegarder
+  await saveD();
+  addLog('vehicle_transfert', `${getVehicleName(srcVid)} → ${getVehicleName(destVid)} (IMEI: ${imei})`, destVid);
+}
+// ══════════════════════════════════════════════════════════════
+
 // ══════ IMEI ZONE ══════
 function isInstallType(typeVal){
   const v = typeVal || document.getElementById('iType')?.value || '';
@@ -4962,6 +5050,14 @@ function checkSaveBtn(){
   const btn = document.getElementById('miOk');
   if(!btn) return;
   const tech = document.getElementById('iTech')?.value.trim();
+  const tp = document.getElementById('iType')?.value || '';
+  // Cas Transfert
+  if(isTransfertType(tp)){
+    const srcId = document.getElementById('iTransfertSrc')?.value;
+    const ok = !!(tech && srcId);
+    btn.disabled = !ok; btn.style.opacity = ok?'':'0.4'; btn.style.cursor = ok?'':'not-allowed';
+    return;
+  }
   const simRequired = isSimType();
   const simOld = document.getElementById('iSimOld')?.value.trim();
   const simNew = document.getElementById('iSimNew')?.value.trim();
@@ -5147,6 +5243,7 @@ function openAddI(){
   toggleSimZone();
   toggleImeiZone();
   toggleSerialZone();
+  toggleTransfertZone();
   checkSaveBtn();
   document.getElementById('moI').classList.add('open');
 }
@@ -5180,23 +5277,42 @@ async function saveV(){ if(!canDo('createVehicle')){alert('Accès refusé.');ret
     'new-vehicle'
   );
 }
-function saveI(){
-  if(!canDo('createIntervention')){alert('Accès refusé.');return;}
+async function saveI(){
+  if(!canDo('createIntervention')){alert('Acces refus.');return;}
   const d=document.getElementById('iDate').value,tp=document.getElementById('iType').value,de=document.getElementById('iDesc').value.trim(),co=parseFloat(document.getElementById('iCost').value)||0;
   if(!d){alert(T().alertD);return;}
-  if(!selVid){alert('Sélectionnez d\'abord un véhicule.');return;}
+  if(!selVid){alert('Selectionnez d abord un vehicule.');return;}
   const tech=document.getElementById('iTech').value.trim();
   if(!tech){alert('Le technicien est obligatoire.');return;}
+
+  // CAS TRANSFERT
+  if(isTransfertType(tp)){
+    const srcId = document.getElementById('iTransfertSrc')?.value;
+    if(!srcId){alert('Selectionnez le vehicule source (A).');return;}
+    const imeiVal = document.getElementById('iImei')?.value.trim()||'';
+    const serialVal = document.getElementById('iSerial')?.value.trim()||'';
+    const srcName = getVehicleName(srcId);
+    const destName = getVehicleName(selVid);
+    if(!confirm('Confirmer le transfert : ' + srcName + ' vers ' + destName + '. Les interventions de ' + srcName + ' seront copiees. Continuer ?')) return;
+    const iObj={id:uid(),vehicleId:selVid,date:d,type:tp,desc:de,cost:0,tech:tech||null,addedBy:currentUser?.email,attachments:[...pendingAttachments],imei:imeiVal,serial:serialVal,transfertFrom:srcId};
+    data.interventions.push(iObj);
+    await executeTransfert(srcId, selVid, tech, d, de, imeiVal, serialVal);
+    pendingAttachments=[];
+    closeMo('moI');curYear=new Date(d).getFullYear();render();
+    return;
+  }
+
+  // CAS NORMAL
   const simRequired=isSimType(tp);
   const simOld=document.getElementById('iSimOld').value.trim();
   const simNew=document.getElementById('iSimNew').value.trim();
-  if(simRequired&&(!simOld||!simNew)){alert('Les numéros SIM (ancien et nouveau) sont obligatoires.');return;}
+  if(simRequired&&(!simOld||!simNew)){alert('Les numeros SIM sont obligatoires.');return;}
   const imeiRequired=isInstallType(tp);
   const imeiVal=document.getElementById('iImei')?.value.trim()||'';
-  if(imeiRequired&&imeiVal.length!==15){alert('IMEI obligatoire — 15 chiffres requis pour installation/désinstallation.');return;}
+  if(imeiRequired&&imeiVal.length!==15){alert('IMEI obligatoire - 15 chiffres requis.');return;}
   const serialRequired=isAdplusType(tp);
   const serialVal=document.getElementById('iSerial')?.value.trim()||'';
-  if(serialRequired&&serialVal.length!==10){alert('Numéro de série obligatoire — 10 caractères requis pour les kits ADplus.');return;}
+  if(serialRequired&&serialVal.length!==10){alert('Numero de serie obligatoire - 10 caracteres requis.');return;}
   const attachments=[...pendingAttachments];
   const iObj={id:uid(),vehicleId:selVid,date:d,type:tp,desc:de,cost:co,tech:tech||null,addedBy:currentUser?.email,attachments};
   if(simRequired){iObj.simOld=simOld;iObj.simNew=simNew;}
@@ -5207,14 +5323,9 @@ function saveI(){
   closeMo('moI');curYear=new Date(d).getFullYear();render();
   saveD().catch(()=>alert('Erreur de sauvegarde.'));
   const _vNameI = data.vehicles.find(v=>v.id===selVid)?.name || selVid;
-  addLog('intervention_add', `${tp} — ${_vNameI} (${tech})`, iObj.id);
-  // Notification push
+  addLog('intervention_add', `${tp} - ${_vNameI} (${tech})`, iObj.id);
   const vName = data.vehicles.find(v=>v.id===selVid)?.name || selVid;
-  sendPushToAdmins(
-    '🔧 Nouvelle intervention — ' + currentBase,
-    tp + ' sur ' + vName + ' par ' + (tech||currentUser?.email||''),
-    'new-intervention'
-  );
+  sendPushToAdmins('Nouvelle intervention - ' + currentBase, tp + ' sur ' + vName + ' par ' + (tech||currentUser?.email||''), 'new-intervention');
 }
 function delV(id){
   if(!canDo('deleteVehicle'))return;
