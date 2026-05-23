@@ -2726,10 +2726,31 @@ function loadBaseData(skipRender){
   FB.on(bKey('config'), fbCfg => {
     if(fbCfg){
       _cfgCache = fbCfg;
+      ensureNewItypes(); // Injecter les nouveaux types si absents
       populateSels();
     }
   });
 }
+// Migration automatique : ajouter les nouveaux types manquants dans la config
+function ensureNewItypes(){
+  const cfg = getCfg();
+  if(!cfg?.itypes) return;
+  const newTypes = [
+    {"key": "Transfert de balise", "color": "#ff9f43", "group": "transfert"}
+  ];
+  let changed = false;
+  newTypes.forEach(nt => {
+    if(!cfg.itypes.find(t=>t.key===nt.key)){
+      cfg.itypes.push(nt);
+      changed = true;
+    }
+  });
+  if(changed){
+    _cfgCache = cfg;
+    FB.set(bKey('config'), cfg).catch(()=>{});
+  }
+}
+
 const getEUR=()=>(getCfg()?.rate)||DEFAULT_EUR;
 const getTKEYS=()=>(getCfg()?.itypes||[]).map(t=>t.key);
 const getTCmap=()=>{const m={};(getCfg()?.itypes||[]).forEach(t=>m[t.key]=t.color);return m;};
@@ -3639,16 +3660,18 @@ function populateSels(){
   // Intervention types from config
   const is=document.getElementById('iType');if(!is)return;
   const itypes=cfg?.itypes||DEFAULT_ITYPES;
-  const groups={install:[],desinstall:[],piece:[],other:[]};
+  const groups={install:[],desinstall:[],piece:[],other:[],transfert:[]};
   itypes.forEach(t=>{ if(groups[t.group])groups[t.group].push(t); else groups.other.push(t); });
-  const grpLabel={install:L.grpI,desinstall:L.grpD,piece:L.grpP,other:L.grpO};
+  const grpLabel={install:L.grpI,desinstall:L.grpD,piece:L.grpP,other:L.grpO,transfert:'🔄 Transfert'};
   let html='';
-  ['install','desinstall','piece','other'].forEach(g=>{
+  ['install','desinstall','piece','transfert','other'].forEach(g=>{
     if(groups[g].length){
       html+=`<optgroup label="${grpLabel[g]}">${groups[g].map(t=>`<option value="${t.key}">${t.key}</option>`).join('')}</optgroup>`;
     }
   });
   is.innerHTML=html;
+  // Synchroniser avec la modale édition
+  const eis=document.getElementById('eiType');if(eis)eis.innerHTML=is.innerHTML;
 }
 
 function switchTab(tab){
