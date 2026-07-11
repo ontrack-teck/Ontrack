@@ -556,6 +556,7 @@ tbody td{padding:11px 17px;font-size:12px;}
   <button class="tbtn" onclick="switchTab('sim')" id="tabSIM">📱 SIM</button>
   <button class="tbtn" onclick="switchTab('imei')" id="tabIMEI">📡 IMEI/Série</button>
   <button class="tbtn" onclick="switchTab('logs')" id="tabLOGS">📋 Logs</button>
+  <button class="tbtn" onclick="switchTab('stock')" id="tabSTOCK">📦 Stock</button>
 </div>
 <div class="abody">
   <div class="sidebar">
@@ -571,6 +572,7 @@ tbody td{padding:11px 17px;font-size:12px;}
     <div id="tab-sim" class="tp"><div id="simTabC"></div></div>
     <div id="tab-imei" class="tp"><div id="imeiTabC"></div></div>
     <div id="tab-logs" class="tp"><div id="logsTabC"></div></div>
+    <div id="tab-stock" class="tp"><div id="stockTabC"></div></div>
   </div>
 </div>
 
@@ -1913,6 +1915,262 @@ function renderLogsTable(){
 }
 // ══════════════════════════════════════════════════════════════
 
+
+// ═══════════════════ GESTION DE STOCK ═══════════════════
+// Structure Firebase : ZA__stock (partagé toutes bases)
+// { items: [{id, name, category, unit, qty, minAlert, createdAt}], movements: [...] }
+
+const STOCK_PATH = () => currentPlatform + '__stock';
+
+const STOCK_CATEGORIES = {
+  'gps':    {label:'Balise GPS',    icon:'📡', color:'#4a9eff'},
+  'sim':    {label:'SIM Card',      icon:'📱', color:'#2ec97b'},
+  'adplus': {label:'Kit ADplus',    icon:'📦', color:'#9b6dff'},
+  'piece':  {label:'Pièce de rechange', icon:'🔧', color:'#ff9f43'},
+  'autre':  {label:'Autre',         icon:'📋', color:'#7a8099'},
+};
+
+// Règles de consommation automatique par groupe d'intervention
+const STOCK_RULES = {
+  'install':    [{cat:'gps', delta:-1}],
+  'desinstall': [{cat:'gps', delta:+1}], // récupération
+  'piece':      [{cat:'piece', delta:-1}],
+};
+// Pour ADplus spécifiquement
+const ADPLUS_STOCK_RULE = {cat:'adplus', delta:-1};
+
+let _stockCache = null;
+let stockSearch = '';
+let stockCatFilter = 'all';
+
+async function getStock(){
+  if(_stockCache) return _stockCache;
+  const s = await FB.get(STOCK_PATH()).catch(()=>null);
+  _stockCache = s || {items:[], movements:[]};
+  return _stockCache;
+}
+
+async function saveStock(stock){
+  _stockCache = stock;
+  await FB.set(STOCK_PATH(), stock);
+}
+
+// Appliquer mouvement automatique lors d'une intervention
+async function applyStockMovement(intervention, vName){
+  const cfg = getCfg();
+  const itypes = cfg?.itypes || DEFAULT_ITYPES;
+  const itype = itypes.find(t=>t.key===intervention.type);
+  if(!itype) return;
+  const stock = await getStock();
+  const movements = [];
+  // Règle par groupe
+  const rules = STOCK_RULES[itype.group] || [];
+  // Règle ADplus supplémentaire
+  if(isAdplusType(intervention.type)) rules.push(ADPLUS_STOCK_RULE);
+  // Règle SIM
+  if(isSimType(intervention.type)) rules.push({cat:'sim', delta:-1});
+  for(const rule of rules){
+    const item = stock.items.find(i=>i.category===rule.cat && i.qty > 0);
+    if(item){
+      item.qty = Math.max(0, item.qty + rule.delta);
+      movements.push({
+        id: uid(), itemId: item.id, itemName: item.name,
+        delta: rule.delta, qty: item.qty,
+        date: new Date().toISOString(),
+        interventionId: intervention.id,
+        interventionType: intervention.type,
+        vehicle: vName, base: currentBase,
+        user: currentUser?.email
+      });
+    }
+  }
+  if(movements.length){
+    stock.movements = [...(stock.movements||[]), ...movements].slice(-1000);
+    await saveStock(stock);
+  }
+}
+
+// ─── RENDER ──────────────────────────────────────────────
+async function renderStockTab(){
+  const el = document.getElementById('stockTabC');
+  if(!el) return;
+  el.innerHTML = '<div style="text-align:center;padding:32px;color:var(--muted)">⏳ Chargement du stock…</div>';
+  const stock = await getStock();
+  _stockCache = stock;
+  renderStockUI(stock);
+}
+
+function renderStockUI(stock){
+  const el = document.getElementById('stockTabC');
+  if(!el) return;
+  const items = stock.items || [];
+  // KPIs
+  const totalItems = items.length;
+  const lowStock = items.filter(i=>i.qty<=i.minAlert).length;
+  const outOfStock = items.filter(i=>i.qty===0).length;
+  const totalQty = items.reduce((s,i)=>s+i.qty,0);
+  // Filtres
+  let list = items;
+  if(stockCatFilter!=='all') list = list.filter(i=>i.category===stockCatFilter);
+  if(stockSearch) list = list.filter(i=>(i.name||'').toLowerCase().includes(stockSearch.toLowerCase()));
+  const isAdmin = currentUser?.role==='admin';
+
+  const rows = list.length ? list.map(i=>{
+    const cat = STOCK_CATEGORIES[i.category]||STOCK_CATEGORIES.autre;
+    const isLow = i.qty>0 && i.qty<=i.minAlert;
+    const isOut = i.qty===0;
+    const qtyColor = isOut?'#e05a2b':isLow?'#ff9f43':'#2ec97b';
+    const badge = isOut?'<span style="background:rgba(224,90,43,.15);color:#e05a2b;font-size:10px;font-weight:700;padding:2px 7px;border-radius:6px;margin-left:6px">RUPTURE</span>':
+                  isLow?'<span style="background:rgba(255,159,67,.15);color:#ff9f43;font-size:10px;font-weight:700;padding:2px 7px;border-radius:6px;margin-left:6px">STOCK BAS</span>':'';
+    return `<tr>
+      <td><span style="font-size:16px">${cat.icon}</span></td>
+      <td style="font-weight:700">${i.name}${badge}</td>
+      <td><span style="background:${cat.color}22;color:${cat.color};padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700">${cat.label}</span></td>
+      <td style="font-family:'DM Mono',monospace;font-size:16px;font-weight:800;color:${qtyColor}">${i.qty}</td>
+      <td style="color:var(--muted);font-size:12px">${i.unit||'unité(s)'}</td>
+      <td style="color:var(--muted);font-size:11px">${i.minAlert||0}</td>
+      ${isAdmin?`<td style="display:flex;gap:6px">
+        <button onclick="openStockAdjust('${i.id}')" style="background:rgba(74,158,255,.15);color:var(--blue);border:1px solid var(--blue);border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer;font-weight:700">± Ajuster</button>
+        <button onclick="deleteStockItem('${i.id}')" style="background:rgba(224,90,43,.1);color:#e05a2b;border:1px solid #e05a2b;border-radius:6px;padding:4px 8px;font-size:11px;cursor:pointer">🗑</button>
+      </td>`:'<td></td>'}
+    </tr>`;
+  }).join('') : `<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--muted)">📦 Aucun article${stockSearch||stockCatFilter!=='all'?' trouvé':' — ajoutez votre premier article'}</td></tr>`;
+
+  const catBtns = ['all',...Object.keys(STOCK_CATEGORIES)].map(c=>{
+    const lbl = c==='all'?'Tous':STOCK_CATEGORIES[c].label;
+    return `<button class="sim-chip ${stockCatFilter===c?'active':''}" onclick="stockCatFilter='${c}';renderStockUI(_stockCache)">${lbl}</button>`;
+  }).join('');
+
+  el.innerHTML = `<div class="sim-wrap">
+    <!-- KPIs -->
+    <div class="sim-kpi-row" style="margin-bottom:14px">
+      <div class="sim-kpi"><div class="sim-kpi-val">${totalItems}</div><div class="sim-kpi-lbl">Articles</div></div>
+      <div class="sim-kpi"><div class="sim-kpi-val" style="color:#4a9eff">${totalQty}</div><div class="sim-kpi-lbl">Total unités</div></div>
+      <div class="sim-kpi"><div class="sim-kpi-val" style="color:#ff9f43">${lowStock}</div><div class="sim-kpi-lbl">Stock bas</div></div>
+      <div class="sim-kpi"><div class="sim-kpi-val" style="color:#e05a2b">${outOfStock}</div><div class="sim-kpi-lbl">Rupture</div></div>
+    </div>
+    <!-- Topbar -->
+    <div class="sim-topbar">
+      <input class="sim-search" id="stockSearchInput" type="text" placeholder="🔍 Rechercher un article…"
+        oninput="stockSearch=this.value;renderStockUI(_stockCache)">
+      <div class="sim-filter-group">${catBtns}</div>
+    </div>
+    <!-- Bouton ajouter (admin) -->
+    ${isAdmin?`<div style="margin:10px 0">
+      <button onclick="openAddStockItem()" style="background:var(--accent);color:#000;border:none;border-radius:8px;padding:8px 18px;font-weight:700;cursor:pointer;font-size:13px;font-family:'Syne',sans-serif">+ Ajouter un article</button>
+    </div>`:''}
+    <!-- Tableau -->
+    <div class="sim-table-wrap">
+      <table class="sim-table">
+        <thead><tr>
+          <th></th><th>Article</th><th>Catégorie</th>
+          <th>Quantité</th><th>Unité</th><th>Alerte min</th><th>Actions</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+    <!-- Historique mouvements -->
+    <div style="margin-top:20px">
+      <div style="font-size:13px;font-weight:700;color:var(--muted);margin-bottom:10px;letter-spacing:1px;text-transform:uppercase">📊 Derniers mouvements</div>
+      <div id="stockMovements">${renderStockMovements(stock.movements||[])}</div>
+    </div>
+  </div>`;
+}
+
+function renderStockMovements(movements){
+  const recent = [...movements].sort((a,b)=>new Date(b.date)-new Date(a.date)).slice(0,20);
+  if(!recent.length) return '<div style="color:var(--muted);font-size:12px;padding:8px 0">Aucun mouvement enregistré</div>';
+  return `<div class="sim-table-wrap"><table class="sim-table">
+    <thead><tr><th>Date</th><th>Article</th><th>Mouvement</th><th>Type intervention</th><th>Véhicule</th><th>Base</th></tr></thead>
+    <tbody>${recent.map(m=>{
+      const isPos=m.delta>0;
+      return `<tr>
+        <td style="font-family:'DM Mono',monospace;font-size:11px;color:var(--muted)">${new Date(m.date).toLocaleDateString('fr-FR')}</td>
+        <td style="font-weight:700;font-size:12px">${m.itemName||'—'}</td>
+        <td><span style="color:${isPos?'#2ec97b':'#e05a2b'};font-weight:800;font-family:'DM Mono',monospace">${isPos?'+':''}${m.delta}</span> → <b>${m.qty}</b></td>
+        <td style="font-size:11px;color:var(--muted)">${m.interventionType||m.reason||'—'}</td>
+        <td style="font-size:11px">${m.vehicle||'—'}</td>
+        <td><span style="background:rgba(74,158,255,.1);color:var(--blue);padding:2px 6px;border-radius:5px;font-size:10px">${m.base||'—'}</span></td>
+      </tr>`;
+    }).join('')}</tbody>
+  </table></div>`;
+}
+
+// ─── MODALES STOCK ────────────────────────────────────────
+function openAddStockItem(){
+  const html = `<div class="mo open" id="moStock"><div class="md" style="max-width:380px">
+    <div class="mh"><span style="font-weight:800;font-size:15px">📦 Nouvel article</span><button class="mcl" onclick="closeMo('moStock')">✕</button></div>
+    <div class="fg"><label>Nom de l'article *</label><input type="text" id="stName" placeholder="Ex: Balise MIX4000" style="width:100%;box-sizing:border-box"></div>
+    <div class="fg"><label>Catégorie *</label><select id="stCat" style="width:100%">
+      ${Object.entries(STOCK_CATEGORIES).map(([k,v])=>`<option value="${k}">${v.icon} ${v.label}</option>`).join('')}
+    </select></div>
+    <div class="fg"><label>Quantité initiale *</label><input type="number" id="stQty" value="0" min="0" style="width:100%;box-sizing:border-box"></div>
+    <div class="fg"><label>Unité</label><input type="text" id="stUnit" placeholder="unité(s), pcs, carte..." style="width:100%;box-sizing:border-box"></div>
+    <div class="fg"><label>Alerte stock bas (quantité min)</label><input type="number" id="stMin" value="5" min="0" style="width:100%;box-sizing:border-box"></div>
+    <div style="display:flex;gap:10px;margin-top:16px">
+      <button class="abtn" onclick="saveStockItem()" style="flex:1">Enregistrer</button>
+      <button class="mcan" onclick="closeMo('moStock')" style="flex:1">Annuler</button>
+    </div>
+  </div></div>`;
+  document.body.insertAdjacentHTML('beforeend', html);
+}
+
+async function saveStockItem(){
+  const name = document.getElementById('stName')?.value.trim();
+  const cat = document.getElementById('stCat')?.value;
+  const qty = parseInt(document.getElementById('stQty')?.value)||0;
+  const unit = document.getElementById('stUnit')?.value.trim()||'unité(s)';
+  const minAlert = parseInt(document.getElementById('stMin')?.value)||5;
+  if(!name){alert('Nom requis.');return;}
+  const stock = await getStock();
+  stock.items.push({id:uid(),name,category:cat,qty,unit,minAlert,createdAt:new Date().toISOString(),createdBy:currentUser?.email});
+  await saveStock(stock);
+  closeMo('moStock');
+  renderStockUI(stock);
+}
+
+function openStockAdjust(itemId){
+  const item = (_stockCache?.items||[]).find(i=>i.id===itemId);
+  if(!item) return;
+  const html = `<div class="mo open" id="moStockAdj"><div class="md" style="max-width:350px">
+    <div class="mh"><span style="font-weight:800;font-size:15px">± Ajuster le stock</span><button class="mcl" onclick="closeMo('moStockAdj')">✕</button></div>
+    <div style="font-size:13px;color:var(--muted);margin-bottom:12px">Article : <b style="color:var(--text)">${item.name}</b> — Stock actuel : <b style="color:var(--accent)">${item.qty}</b> ${item.unit}</div>
+    <div class="fg"><label>Nouvelle quantité *</label><input type="number" id="adjQty" value="${item.qty}" min="0" style="width:100%;box-sizing:border-box"></div>
+    <div class="fg"><label>Raison (optionnel)</label><input type="text" id="adjReason" placeholder="Réapprovisionnement, inventaire..." style="width:100%;box-sizing:border-box"></div>
+    <div style="display:flex;gap:10px;margin-top:16px">
+      <button class="abtn" onclick="applyStockAdjust('${itemId}')" style="flex:1">Enregistrer</button>
+      <button class="mcan" onclick="closeMo('moStockAdj')" style="flex:1">Annuler</button>
+    </div>
+  </div></div>`;
+  document.body.insertAdjacentHTML('beforeend', html);
+}
+
+async function applyStockAdjust(itemId){
+  const newQty = parseInt(document.getElementById('adjQty')?.value)||0;
+  const reason = document.getElementById('adjReason')?.value.trim()||'Ajustement manuel';
+  const stock = await getStock();
+  const item = stock.items.find(i=>i.id===itemId);
+  if(!item) return;
+  const delta = newQty - item.qty;
+  item.qty = newQty;
+  stock.movements = [...(stock.movements||[]), {
+    id:uid(), itemId, itemName:item.name, delta, qty:newQty,
+    date:new Date().toISOString(), reason, base:currentBase, user:currentUser?.email
+  }].slice(-1000);
+  await saveStock(stock);
+  closeMo('moStockAdj');
+  renderStockUI(stock);
+}
+
+async function deleteStockItem(itemId){
+  if(!confirm('Supprimer cet article du stock ?')) return;
+  const stock = await getStock();
+  stock.items = stock.items.filter(i=>i.id!==itemId);
+  await saveStock(stock);
+  renderStockUI(stock);
+}
+// ══════════════════════════════════════════════════════════════
+
 let _fbConnInterval = null;
 async function boot(){
   loadSavedTheme(); // Charger le thème sauvegardé immédiatement
@@ -2266,7 +2524,7 @@ function showApp(){
   applyT();populateSels();render();
   // Restaurer l'onglet actif sauvegardé
   const savedTab = localStorage.getItem('sgo_tab');
-  if(savedTab && ['flotte','interventions','bilan','performance','sim','imei','logs'].includes(savedTab)){
+  if(savedTab && ['flotte','interventions','bilan','performance','sim','imei','logs','stock'].includes(savedTab)){
     switchTab(savedTab);
   }
 }
@@ -3677,7 +3935,7 @@ function populateSels(){
 function switchTab(tab){
   curTab=tab;
   localStorage.setItem('sgo_tab', tab); // Sauvegarder l'onglet actif
-  document.querySelectorAll('.tbtn').forEach((b,i)=>b.classList.toggle('active',['flotte','interventions','bilan','performance','sim','imei','logs'][i]===tab));
+  document.querySelectorAll('.tbtn').forEach((b,i)=>b.classList.toggle('active',['flotte','interventions','bilan','performance','sim','imei','logs','stock'][i]===tab));
   document.querySelectorAll('.tp').forEach(p=>p.classList.remove('active'));
   document.getElementById('tab-'+tab).classList.add('active');
   if(tab==='interventions')renderIT();
@@ -3686,6 +3944,7 @@ function switchTab(tab){
   if(tab==='sim')renderSIMTab();
   if(tab==='imei')renderIMEITab();
   if(tab==='logs')renderLogsTab();
+  if(tab==='stock')renderStockTab();
 }
 
 function initYear(){
@@ -5347,6 +5606,8 @@ async function saveI(){
   saveD().catch(()=>alert('Erreur de sauvegarde.'));
   const _vNameI = data.vehicles.find(v=>v.id===selVid)?.name || selVid;
   addLog('intervention_add', `${tp} - ${_vNameI} (${tech})`, iObj.id);
+  // Consommation automatique du stock
+  applyStockMovement(iObj, _vNameI).catch(e=>console.warn('Stock move error:', e));
   const vName = data.vehicles.find(v=>v.id===selVid)?.name || selVid;
   sendPushToAdmins('Nouvelle intervention - ' + currentBase, tp + ' sur ' + vName + ' par ' + (tech||currentUser?.email||''), 'new-intervention');
 }
