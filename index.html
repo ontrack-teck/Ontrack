@@ -1916,6 +1916,151 @@ function renderLogsTable(){
 // ══════════════════════════════════════════════════════════════
 
 
+
+// ═══════════════════ TRAÇABILITÉ IMEI ═══════════════════
+let imeiTrackSearch = '';
+
+function renderImeiTracking(){
+  const cfg = getCfg();
+  const itypes = cfg?.itypes || DEFAULT_ITYPES;
+  const installKeys = itypes.filter(t=>t.group==='install').map(t=>t.key);
+  const desinstallKeys = itypes.filter(t=>t.group==='desinstall').map(t=>t.key);
+
+  // Collecter tous les IMEI uniques depuis les interventions
+  const imeiMap = {}; // imei -> {installs:[], desinstalls:[], current}
+
+  data.interventions
+    .filter(i => i.imei)
+    .sort((a,b) => new Date(a.date) - new Date(b.date))
+    .forEach(i => {
+      if(!imeiMap[i.imei]) imeiMap[i.imei] = {imei:i.imei, serial:i.serial||null, events:[], currentVehicle:null, currentDate:null};
+      const vName = getVehicleName(i.vehicleId);
+      if(installKeys.includes(i.type)){
+        imeiMap[i.imei].events.push({type:'install', date:i.date, vehicle:vName, vehicleId:i.vehicleId, itype:i.type});
+        imeiMap[i.imei].currentVehicle = vName;
+        imeiMap[i.imei].currentDate = i.date;
+        imeiMap[i.imei].serial = i.serial || imeiMap[i.imei].serial;
+      } else if(desinstallKeys.includes(i.type)){
+        imeiMap[i.imei].events.push({type:'desinstall', date:i.date, vehicle:vName, vehicleId:i.vehicleId, itype:i.type});
+        imeiMap[i.imei].currentVehicle = null;
+        imeiMap[i.imei].currentDate = null;
+      }
+    });
+
+  // Calculer la durée de vie de chaque IMEI
+  const imeis = Object.values(imeiMap).map(tracker => {
+    let totalDays = 0;
+    let events = tracker.events;
+    // Calculer le temps actif cumulé (entre chaque install et désinstall)
+    for(let j=0; j<events.length; j++){
+      if(events[j].type==='install'){
+        const installDate = new Date(events[j].date);
+        // Chercher la prochaine désinstallation
+        const nextDes = events.slice(j+1).find(e=>e.type==='desinstall');
+        const endDate = nextDes ? new Date(nextDes.date) : new Date();
+        const days = Math.max(0, Math.floor((endDate - installDate) / (1000*60*60*24)));
+        totalDays += days;
+      }
+    }
+    return {...tracker, totalDays, isActive: !!tracker.currentVehicle};
+  }).sort((a,b) => b.totalDays - a.totalDays);
+
+  // Appliquer la recherche
+  let filtered = imeis;
+  if(imeiTrackSearch){
+    const q = imeiTrackSearch.toLowerCase();
+    filtered = imeis.filter(t =>
+      t.imei.includes(q) ||
+      (t.serial||'').toLowerCase().includes(q) ||
+      (t.currentVehicle||'').toLowerCase().includes(q)
+    );
+  }
+
+  if(!filtered.length){
+    return `<div style="text-align:center;padding:24px;color:var(--muted);font-size:13px">📡 Aucune balise enregistrée${imeiTrackSearch?' pour cette recherche':''}</div>`;
+  }
+
+  // KPIs globaux
+  const totalImeis = imeis.length;
+  const activeImeis = imeis.filter(i=>i.isActive).length;
+  const stockImeis = imeis.filter(i=>!i.isActive).length;
+  const avgDays = imeis.length ? Math.round(imeis.reduce((s,i)=>s+i.totalDays,0)/imeis.length) : 0;
+
+  const rows = filtered.map(t => {
+    const statusColor = t.isActive ? '#2ec97b' : '#7a8099';
+    const statusLabel = t.isActive
+      ? `<span style="background:rgba(46,201,123,.15);color:#2ec97b;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:700">INSTALLÉE</span>`
+      : `<span style="background:rgba(122,128,153,.15);color:#7a8099;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:700">EN STOCK</span>`;
+    const dureeColor = t.totalDays > 365 ? '#e05a2b' : t.totalDays > 180 ? '#ff9f43' : '#2ec97b';
+    const dureeStr = t.totalDays >= 365
+      ? `${Math.floor(t.totalDays/365)}a ${Math.floor((t.totalDays%365)/30)}m`
+      : t.totalDays >= 30
+      ? `${Math.floor(t.totalDays/30)}m ${t.totalDays%30}j`
+      : `${t.totalDays}j`;
+
+    // Dernier véhicule connu
+    const lastInstall = [...t.events].reverse().find(e=>e.type==='install');
+    const vehicleStr = t.isActive ? t.currentVehicle : (lastInstall?.vehicle||'—');
+
+    return `<tr style="cursor:pointer" onclick="toggleImeiDetail('${t.imei}')">
+      <td style="font-family:'DM Mono',monospace;font-size:11px;font-weight:700;color:#4a9eff">${t.imei}</td>
+      <td style="font-family:'DM Mono',monospace;font-size:11px;color:#9b6dff">${t.serial||'—'}</td>
+      <td>${statusLabel}</td>
+      <td style="font-size:12px;font-weight:600">${vehicleStr}</td>
+      <td><span style="font-family:'DM Mono',monospace;font-size:13px;font-weight:800;color:${dureeColor}">${dureeStr}</span></td>
+      <td style="color:var(--muted);font-size:11px">${t.events.length} événement(s)</td>
+    </tr>
+    <tr id="detail_${t.imei.replace(/[^a-z0-9]/gi,'_')}" style="display:none">
+      <td colspan="6" style="padding:0">
+        <div style="background:var(--surface2);border-radius:8px;margin:4px;padding:12px">
+          <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:8px;letter-spacing:1px">HISTORIQUE COMPLET</div>
+          ${t.events.map((e,idx) => {
+            const isInst = e.type==='install';
+            const col = isInst?'#2ec97b':'#e05a2b';
+            const icon = isInst?'📥':'📤';
+            return `<div style="display:flex;align-items:center;gap:10px;padding:5px 0;border-bottom:1px solid var(--border)">
+              <span style="font-size:14px">${icon}</span>
+              <span style="font-size:11px;font-family:'DM Mono',monospace;color:var(--muted);min-width:90px">${new Date(e.date).toLocaleDateString('fr-FR')}</span>
+              <span style="font-size:11px;font-weight:700;color:${col}">${isInst?'Installation':'Désinstallation'}</span>
+              <span style="font-size:11px;color:var(--muted)">·</span>
+              <span style="font-size:11px">${e.vehicle}</span>
+              <span style="font-size:10px;color:var(--muted)">${e.itype}</span>
+            </div>`;
+          }).join('')}
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+
+  return `<div>
+    <div class="sim-kpi-row" style="margin-bottom:12px">
+      <div class="sim-kpi"><div class="sim-kpi-val">${totalImeis}</div><div class="sim-kpi-lbl">Balises totales</div></div>
+      <div class="sim-kpi"><div class="sim-kpi-val" style="color:#2ec97b">${activeImeis}</div><div class="sim-kpi-lbl">Installées</div></div>
+      <div class="sim-kpi"><div class="sim-kpi-val" style="color:var(--muted)">${stockImeis}</div><div class="sim-kpi-lbl">En stock</div></div>
+      <div class="sim-kpi"><div class="sim-kpi-val" style="color:#ff9f43">${avgDays}j</div><div class="sim-kpi-lbl">Durée moy.</div></div>
+    </div>
+    <div style="margin-bottom:10px">
+      <input class="sim-search" type="text" placeholder="🔍 Rechercher IMEI, serial, véhicule…"
+        oninput="imeiTrackSearch=this.value;document.getElementById('imeiTracking').innerHTML=renderImeiTracking()">
+    </div>
+    <div class="sim-table-wrap"><table class="sim-table" style="min-width:600px">
+      <thead><tr>
+        <th>IMEI</th><th>N° Série</th><th>Statut</th>
+        <th>Véhicule</th><th>⏱ Durée active</th><th>Historique</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>
+    <div style="font-size:11px;color:var(--muted);margin-top:8px">💡 Cliquez sur une ligne pour voir l'historique complet · 🔴 > 1 an · 🟡 > 6 mois · 🟢 < 6 mois</div>
+  </div>`;
+}
+
+function toggleImeiDetail(imei){
+  const id = 'detail_' + imei.replace(/[^a-z0-9]/gi,'_');
+  const el = document.getElementById(id);
+  if(el) el.style.display = el.style.display==='none'?'':'none';
+}
+// ══════════════════════════════════════════════════════════════
+
 // ═══════════════════ GESTION DE STOCK ═══════════════════
 // Structure Firebase : ZA__stock (partagé toutes bases)
 // { items: [{id, name, category, unit, qty, minAlert, createdAt}], movements: [...] }
@@ -2073,6 +2218,11 @@ function renderStockUI(stock){
     <div style="margin-top:20px">
       <div style="font-size:13px;font-weight:700;color:var(--muted);margin-bottom:10px;letter-spacing:1px;text-transform:uppercase">📊 Derniers mouvements</div>
       <div id="stockMovements">${renderStockMovements(stock.movements||[])}</div>
+    </div>
+    <!-- Suivi IMEI -->
+    <div style="margin-top:28px">
+      <div style="font-size:13px;font-weight:700;color:var(--muted);margin-bottom:10px;letter-spacing:1px;text-transform:uppercase">📡 Traçabilité des balises par IMEI</div>
+      <div id="imeiTracking">${renderImeiTracking()}</div>
     </div>
   </div>`;
 }
