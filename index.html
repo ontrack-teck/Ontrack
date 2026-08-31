@@ -2283,13 +2283,22 @@ function openAddStockItem(){
     </div>
   </div></div>`;
   document.body.insertAdjacentHTML('beforeend', html);
+  // Déclencher après que le DOM soit prêt (délai court mais suffisant)
+  setTimeout(()=>{
+    toggleStockImeiZone();
+  }, 50);
 }
 
 function toggleStockImeiZone(){
   const cat = document.getElementById('stCat')?.value;
   const zone = document.getElementById('stImeiZone');
-  if(zone) zone.style.display = cat === 'gps' ? '' : 'none';
-  if(cat === 'gps') updateStockImeiFields();
+  if(!zone) return;
+  zone.style.display = cat === 'gps' ? '' : 'none';
+  if(cat === 'gps'){
+    updateStockImeiFields();
+    // S'assurer que la zone est bien visible (forcer le repaint)
+    zone.offsetHeight;
+  }
 }
 
 function updateStockImeiFields(){
@@ -2298,11 +2307,12 @@ function updateStockImeiFields(){
   const qty = parseInt(document.getElementById('stQty')?.value) || 0;
   const container = document.getElementById('stImeiFields');
   if(!container) return;
-  // Limiter à 50 champs max pour éviter une surcharge
   const count = Math.min(qty, 50);
-  // Conserver les valeurs déjà saisies
   const existing = Array.from(container.querySelectorAll('input')).map(i=>i.value);
-  container.innerHTML = count === 0 ? '<div style="color:var(--muted);font-size:11px">Saisissez une quantité pour afficher les champs IMEI</div>' :
+  container.innerHTML = count === 0 ? `<div style="background:var(--surface2);border-radius:8px;padding:10px;text-align:center;">
+    <span style="font-size:20px">📡</span><br>
+    <span style="color:var(--muted);font-size:12px">Saisissez la quantité ci-dessus<br>pour afficher les champs IMEI</span>
+  </div>` :
     Array.from({length:count}, (_,i) => `
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
         <span style="font-size:11px;color:var(--muted);min-width:24px;text-align:right">#${i+1}</span>
