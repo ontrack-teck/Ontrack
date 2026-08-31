@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ONTRACK — Gestion de Flotte</title>
+<title>TechFleet — Gestion de Flotte</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;600;700;800&display=swap');
@@ -410,7 +410,7 @@ tbody td{padding:11px 17px;font-size:12px;}
   <link rel="apple-touch-icon" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1MTIgNTEyIiB3aWR0aD0iNTEyIiBoZWlnaHQ9IjUxMiI+CiAgPGRlZnM+CiAgICA8bGluZWFyR3JhZGllbnQgaWQ9ImJnIiB4MT0iMCUiIHkxPSIwJSIgeDI9IjEwMCUiIHkyPSIxMDAlIj4KICAgICAgPHN0b3Agb2Zmc2V0PSIwJSIgc3R5bGU9InN0b3AtY29sb3I6IzA2MGUwNyIvPgogICAgICA8c3RvcCBvZmZzZXQ9IjEwMCUiIHN0eWxlPSJzdG9wLWNvbG9yOiMwYTFhMGMiLz4KICAgIDwvbGluZWFyR3JhZGllbnQ+CiAgICA8bGluZWFyR3JhZGllbnQgaWQ9ImdncmFkIiB4MT0iMCUiIHkxPSIwJSIgeDI9IjEwMCUiIHkyPSIxMDAlIj4KICAgICAgPHN0b3Agb2Zmc2V0PSIwJSIgc3R5bGU9InN0b3AtY29sb3I6IzJlYzk3YiIvPgogICAgICA8c3RvcCBvZmZzZXQ9IjEwMCUiIHN0eWxlPSJzdG9wLWNvbG9yOiMxYWFkNjMiLz4KICAgIDwvbGluZWFyR3JhZGllbnQ+CiAgICA8bGluZWFyR3JhZGllbnQgaWQ9InRncmFkIiB4MT0iMCUiIHkxPSIwJSIgeDI9IjAlIiB5Mj0iMTAwJSI+CiAgICAgIDxzdG9wIG9mZnNldD0iMCUiIHN0eWxlPSJzdG9wLWNvbG9yOiNmZmZmZmYiLz4KICAgICAgPHN0b3Agb2Zmc2V0PSIxMDAlIiBzdHlsZT0ic3RvcC1jb2xvcjojYjBiMGIwIi8+CiAgICA8L2xpbmVhckdyYWRpZW50PgogICAgPHJhZGlhbEdyYWRpZW50IGlkPSJnbG93X3IiIGN4PSI1MCUiIGN5PSI1MCUiIHI9IjUwJSI+CiAgICAgIDxzdG9wIG9mZnNldD0iMCUiIHN0eWxlPSJzdG9wLWNvbG9yOiMyZWM5N2I7c3RvcC1vcGFjaXR5OjAuMyIvPgogICAgICA8c3RvcCBvZmZzZXQ9IjEwMCUiIHN0eWxlPSJzdG9wLWNvbG9yOiMyZWM5N2I7c3RvcC1vcGFjaXR5OjAiLz4KICAgIDwvcmFkaWFsR3JhZGllbnQ+CiAgICA8ZmlsdGVyIGlkPSJzaGFkb3ciIHg9Ii0yMCUiIHk9Ii0yMCUiIHdpZHRoPSIxNDAlIiBoZWlnaHQ9IjE0MCUiPgogICAgICA8ZmVEcm9wU2hhZG93IGR4PSIwIiBkeT0iMCIgc3RkRGV2aWF0aW9uPSI4IiBmbG9vZC1jb2xvcj0iIzJlYzk3YiIgZmxvb2Qtb3BhY2l0eT0iMC41Ii8+CiAgICA8L2ZpbHRlcj4KICAgIDxmaWx0ZXIgaWQ9InRzaGFkb3ciPgogICAgICA8ZmVEcm9wU2hhZG93IGR4PSIyIiBkeT0iMiIgc3RkRGV2aWF0aW9uPSI0IiBmbG9vZC1jb2xvcj0iIzAwMCIgZmxvb2Qtb3BhY2l0eT0iMC41Ii8+CiAgICA8L2ZpbHRlcj4KICAgIDxjbGlwUGF0aCBpZD0iZ2xvYmVDbGlwIj4KICAgICAgPGNpcmNsZSBjeD0iMTY4IiBjeT0iMjQ4IiByPSIxMTgiLz4KICAgIDwvY2xpcFBhdGg+CiAgPC9kZWZzPgoKICA8IS0tIEZvbmQgLS0+CiAgPHJlY3Qgd2lkdGg9IjUxMiIgaGVpZ2h0PSI1MTIiIHJ4PSIxMDAiIGZpbGw9InVybCgjYmcpIi8+CgogIDwhLS0gTHVldXIgZGVycmnDqHJlIGxlIGdsb2JlIC0tPgogIDxjaXJjbGUgY3g9IjE2OCIgY3k9IjI0OCIgcj0iMTQwIiBmaWxsPSJ1cmwoI2dsb3dfcikiLz4KCiAgPCEtLSDilZDilZDilZAgR0xPQkUg4pWQ4pWQ4pWQIC0tPgogIDwhLS0gQ29ycHMgZHUgZ2xvYmUgLS0+CiAgPGNpcmNsZSBjeD0iMTY4IiBjeT0iMjQ4IiByPSIxMTgiIGZpbGw9Im5vbmUiIHN0cm9rZT0idXJsKCNnZ3JhZCkiIHN0cm9rZS13aWR0aD0iNCIgZmlsdGVyPSJ1cmwoI3NoYWRvdykiLz4KICA8Y2lyY2xlIGN4PSIxNjgiIGN5PSIyNDgiIHI9IjExOCIgZmlsbD0iIzA2MGUwNyIgb3BhY2l0eT0iMC44NSIvPgoKICA8IS0tIExpZ25lcyBkZSBsYXRpdHVkZSAtLT4KICA8ZWxsaXBzZSBjeD0iMTY4IiBjeT0iMjQ4IiByeD0iMTE4IiByeT0iMzUiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzJlYzk3YiIgc3Ryb2tlLXdpZHRoPSIxLjIiIG9wYWNpdHk9IjAuMyIvPgogIDxlbGxpcHNlIGN4PSIxNjgiIGN5PSIyNDgiIHJ4PSIxMTgiIHJ5PSI3MCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjMmVjOTdiIiBzdHJva2Utd2lkdGg9IjEiIG9wYWNpdHk9IjAuMiIvPgogIDxsaW5lIHgxPSI1MCIgeTE9IjI0OCIgeDI9IjI4NiIgeTI9IjI0OCIgc3Ryb2tlPSIjMmVjOTdiIiBzdHJva2Utd2lkdGg9IjEuMiIgb3BhY2l0eT0iMC4zIi8+CgogIDwhLS0gTGlnbmVzIGRlIGxvbmdpdHVkZSAtLT4KICA8ZWxsaXBzZSBjeD0iMTY4IiBjeT0iMjQ4IiByeD0iNDAiIHJ5PSIxMTgiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzJlYzk3YiIgc3Ryb2tlLXdpZHRoPSIxIiBvcGFjaXR5PSIwLjI1Ii8+CiAgPGVsbGlwc2UgY3g9IjE2OCIgY3k9IjI0OCIgcng9IjkwIiByeT0iMTE4IiBmaWxsPSJub25lIiBzdHJva2U9IiMyZWM5N2IiIHN0cm9rZS13aWR0aD0iMSIgb3BhY2l0eT0iMC4xNSIvPgoKICA8IS0tIENvbnRvdXIgZXh0w6lyaWV1ciBicmlsbGFudCAtLT4KICA8Y2lyY2xlIGN4PSIxNjgiIGN5PSIyNDgiIHI9IjExOCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ1cmwoI2dncmFkKSIgc3Ryb2tlLXdpZHRoPSIzLjUiLz4KCiAgPCEtLSDilZDilZDilZAgUElOIEdQUyDilZDilZDilZAgLS0+CiAgPCEtLSBUaWdlIGR1IHBpbiAtLT4KICA8bGluZSB4MT0iMTY4IiB5MT0iMTc1IiB4Mj0iMTY4IiB5Mj0iMjA1IiBzdHJva2U9IiMyZWM5N2IiIHN0cm9rZS13aWR0aD0iMyIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgPCEtLSBDb3JwcyBkdSBwaW4gKGdvdXR0ZSkgLS0+CiAgPHBhdGggZD0iTTE2OCAxMzggQzE0OCAxMzggMTMwIDE1NSAxMzAgMTc1IEMxMzAgMjAwIDE2OCAyMjUgMTY4IDIyNSBDMTY4IDIyNSAyMDYgMjAwIDIwNiAxNzUgQzIwNiAxNTUgMTg4IDEzOCAxNjggMTM4IFoiIGZpbGw9InVybCgjZ2dyYWQpIiBmaWx0ZXI9InVybCgjc2hhZG93KSIvPgogIDwhLS0gQ2VyY2xlIGludMOpcmlldXIgcGluIC0tPgogIDxjaXJjbGUgY3g9IjE2OCIgY3k9IjE3MiIgcj0iMTQiIGZpbGw9IiMwNjBlMDciLz4KICA8Y2lyY2xlIGN4PSIxNjgiIGN5PSIxNzIiIHI9IjgiIGZpbGw9IiMyZWM5N2IiLz4KICA8IS0tIFJlZmxldCBwaW4gLS0+CiAgPHBhdGggZD0iTTE0OCAxNTggQzE1MiAxNDggMTYyIDE0MiAxNzAgMTQyIiBmaWxsPSJub25lIiBzdHJva2U9IndoaXRlIiBzdHJva2Utd2lkdGg9IjIuNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBvcGFjaXR5PSIwLjQiLz4KCiAgPCEtLSDilZDilZDilZAgTEVUVFJFIFQg4pWQ4pWQ4pWQIC0tPgogIDwhLS0gQmFycmUgaG9yaXpvbnRhbGUgZHUgVCAtLT4KICA8cmVjdCB4PSIzMDUiIHk9IjE0NSIgd2lkdGg9IjE1MCIgaGVpZ2h0PSIyOCIgcng9IjYiIGZpbGw9InVybCgjdGdyYWQpIiBmaWx0ZXI9InVybCgjdHNoYWRvdykiLz4KICA8IS0tIEphbWJlIHZlcnRpY2FsZSBkdSBUIC0tPgogIDxyZWN0IHg9IjM2MiIgeT0iMTQ1IiB3aWR0aD0iMzYiIGhlaWdodD0iMjAwIiByeD0iNiIgZmlsbD0idXJsKCN0Z3JhZCkiIGZpbHRlcj0idXJsKCN0c2hhZG93KSIvPgogIDwhLS0gRMOpdGFpbHMgdGVjaCBzdXIgbGUgVCDigJQgZW5jb2NoZXMgLS0+CiAgPHJlY3QgeD0iMzA1IiB5PSIxNDUiIHdpZHRoPSIyNSIgaGVpZ2h0PSI4IiByeD0iMyIgZmlsbD0iIzJlYzk3YiIgb3BhY2l0eT0iMC43Ii8+CiAgPHJlY3QgeD0iNDMwIiB5PSIxNjUiIHdpZHRoPSIyNSIgaGVpZ2h0PSI4IiByeD0iMyIgZmlsbD0iIzJlYzk3YiIgb3BhY2l0eT0iMC43Ii8+CiAgPHJlY3QgeD0iMzYyIiB5PSIzMjAiIHdpZHRoPSIxMiIgaGVpZ2h0PSIyNSIgcng9IjMiIGZpbGw9IiMyZWM5N2IiIG9wYWNpdHk9IjAuNiIvPgogIDwhLS0gTGlnbmUgZMOpY28gdmVydGljYWxlIHN1ciBUIC0tPgogIDxsaW5lIHgxPSIzOTgiIHkxPSIxNzMiIHgyPSIzOTgiIHkyPSIzNDUiIHN0cm9rZT0iIzJlYzk3YiIgc3Ryb2tlLXdpZHRoPSIxLjUiIG9wYWNpdHk9IjAuMiIvPgoKICA8IS0tIOKVkOKVkOKVkCBURVhURSBPTlRSQUNLIOKVkOKVkOKVkCAtLT4KICA8dGV4dCB4PSIyNTYiIHk9IjQxOCIgZm9udC1mYW1pbHk9IidDb3VyaWVyIE5ldycsIG1vbm9zcGFjZSIgZm9udC13ZWlnaHQ9IjcwMCIgZm9udC1zaXplPSIzOCIgZmlsbD0iIzJlYzk3YiIgdGV4dC1hbmNob3I9Im1pZGRsZSIgbGV0dGVyLXNwYWNpbmc9IjEwIiBvcGFjaXR5PSIwLjg1Ij5PTlRSQUNLPC90ZXh0PgogIDwhLS0gTGlnbmUgc291cyBsZSB0ZXh0ZSAtLT4KICA8bGluZSB4MT0iODAiIHkxPSI0MjgiIHgyPSI0MzIiIHkyPSI0MjgiIHN0cm9rZT0iIzJlYzk3YiIgc3Ryb2tlLXdpZHRoPSIxIiBvcGFjaXR5PSIwLjMiLz4KCiAgPCEtLSBQb2ludHMgZMOpY28gY29pbnMgLS0+CiAgPGNpcmNsZSBjeD0iNjAiIGN5PSI2MCIgcj0iNCIgZmlsbD0iIzJlYzk3YiIgb3BhY2l0eT0iMC4zIi8+CiAgPGNpcmNsZSBjeD0iNDUyIiBjeT0iNjAiIHI9IjQiIGZpbGw9IiMyZWM5N2IiIG9wYWNpdHk9IjAuMyIvPgogIDxjaXJjbGUgY3g9IjYwIiBjeT0iNDUyIiByPSI0IiBmaWxsPSIjMmVjOTdiIiBvcGFjaXR5PSIwLjMiLz4KICA8Y2lyY2xlIGN4PSI0NTIiIGN5PSI0NTIiIHI9IjQiIGZpbGw9IiMyZWM5N2IiIG9wYWNpdHk9IjAuMyIvPgo8L3N2Zz4K">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="ONTRACK">
+  <meta name="apple-mobile-web-app-title" content="TechFleet">
   <meta name="mobile-web-app-capable" content="yes">
 </head>
 <body>
@@ -419,7 +419,7 @@ tbody td{padding:11px 17px;font-size:12px;}
 <!-- BOOT LOADER — affiché pendant la vérification de session -->
 <div class="asc on" id="scrBoot" style="z-index:1001;">
   <div style="display:flex;flex-direction:column;align-items:center;gap:20px;">
-    <div style="background:var(--accent);color:#000;font-size:26px;font-weight:900;padding:6px 16px;border-radius:8px;letter-spacing:1px;">ONTRACK</div>
+    <div style="background:var(--accent);color:#000;font-size:26px;font-weight:900;padding:6px 16px;border-radius:8px;letter-spacing:1px;">TechFleet</div>
     <div style="display:flex;gap:6px;align-items:center;">
       <div style="width:8px;height:8px;border-radius:50%;background:var(--accent);animation:bootDot 1.2s ease-in-out infinite;"></div>
       <div style="width:8px;height:8px;border-radius:50%;background:var(--accent);animation:bootDot 1.2s ease-in-out .2s infinite;"></div>
@@ -431,7 +431,7 @@ tbody td{padding:11px 17px;font-size:12px;}
 <div class="asc" id="scrPlatform">
   <div class="abox" style="text-align:center;max-width:480px;">
     <div style="margin-bottom:32px;">
-      <div style="background:var(--accent);color:#000;font-size:26px;font-weight:900;padding:6px 16px;border-radius:8px;display:inline-block;letter-spacing:1px;">ONTRACK</div>
+      <div style="background:var(--accent);color:#000;font-size:26px;font-weight:900;padding:6px 16px;border-radius:8px;display:inline-block;letter-spacing:1px;">TechFleet</div>
       <div style="font-size:13px;color:var(--muted);margin-top:8px;font-weight:600;letter-spacing:2px;text-transform:uppercase;">Sélectionnez votre plateforme</div>
     </div>
     <div id="platformCards" style="display:flex;flex-direction:column;gap:14px;"></div>
@@ -441,7 +441,7 @@ tbody td{padding:11px 17px;font-size:12px;}
 <!-- ACCOUNT PICKER -->
 <div class="apick" id="scrPick">
   <div class="apick-box">
-    <div class="apick-logo"><div class="apick-logo-b">ONTRACK</div></div>
+    <div class="apick-logo"><div class="apick-logo-b">TechFleet</div></div>
     <div class="apick-title">Choisir un compte</div>
     <div class="apick-sub">Sélectionnez un compte pour continuer.</div>
     <div class="acc-list" id="accList"></div>
@@ -452,7 +452,7 @@ tbody td{padding:11px 17px;font-size:12px;}
 <!-- SETUP -->
 <div class="asc" id="scrSetup">
   <div class="abox">
-    <div class="alogo"><div class="alogo-b">ONTRACK</div><div class="alogo-t" id="su_app">Gestion de Flotte</div></div>
+    <div class="alogo"><div class="alogo-b">TechFleet</div><div class="alogo-t" id="su_app">Gestion de Flotte</div></div>
     <div class="atit" id="su_tit">Bienvenue !</div>
     <div class="asub" id="su_sub">Créez votre compte administrateur pour commencer.</div>
     <div class="aerr" id="su_err"></div>
@@ -471,7 +471,7 @@ tbody td{padding:11px 17px;font-size:12px;}
 <!-- FIRST LOGIN (new user, set password) -->
 <div class="asc" id="scrFirst">
   <div class="abox">
-    <div class="alogo"><div class="alogo-b">ONTRACK</div><div class="alogo-t" id="fi_app">Gestion de Flotte</div></div>
+    <div class="alogo"><div class="alogo-b">TechFleet</div><div class="alogo-t" id="fi_app">Gestion de Flotte</div></div>
     <div class="atit" id="fi_tit">Bienvenue !</div>
     <div class="asub" id="fi_sub">Votre compte a été créé. Choisissez votre mot de passe pour continuer.</div>
     <div class="aerr" id="fi_err"></div>
@@ -490,9 +490,9 @@ tbody td{padding:11px 17px;font-size:12px;}
 <!-- LOGIN -->
 <div class="asc" id="scrLogin">
   <div class="abox">
-    <div class="alogo"><div class="alogo-b">ONTRACK</div><div class="alogo-t" id="li_app">Gestion de Flotte</div></div>
+    <div class="alogo"><div class="alogo-b">TechFleet</div><div class="alogo-t" id="li_app">Gestion de Flotte</div></div>
     <div class="atit" id="li_tit">Connexion</div>
-    <div class="asub" id="li_sub">Bienvenue sur ONTRACK Gestion de Flotte.</div>
+    <div class="asub" id="li_sub">Bienvenue sur TechFleet Gestion de Flotte.</div>
     <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);text-align:center;margin-top:2px;">v3.1 — SHA256</div>
     <div class="lockb" id="li_lock"><span id="li_lmsg">Trop de tentatives. Veuillez patienter.</span><span class="ltimer" id="li_timer">5:00</span></div>
     <div class="aerr" id="li_err"></div>
@@ -509,7 +509,7 @@ tbody td{padding:11px 17px;font-size:12px;}
 <!-- APP SHELL -->
 <div id="shell">
 <header>
-  <div class="logo"><span id="baseLogo">ONTRACK</span><span id="hTitle">Gestion de Flotte</span></div>
+  <div class="logo"><span id="baseLogo">TechFleet</span><span id="hTitle">Gestion de Flotte</span></div>
   <span id="syncBadge" title="Synchronisation Firebase" style="font-size:10px;background:rgba(46,201,123,.15);color:#2ec97b;border-radius:20px;padding:3px 9px;margin-left:4px;display:none;">🔴 sync...</span>
   <div class="hctrls">
     <button class="hdrbtn" id="presenceBtn" onclick="togglePresencePanel()" title="Utilisateurs connectés" style="display:none;">🟢 <span id="presenceCount">0</span></button>
@@ -810,7 +810,7 @@ tbody td{padding:11px 17px;font-size:12px;}
   </div>
   <div class="fg">
     <label>Objet de l'email <span style="color:var(--red)">*</span></label>
-    <input type="text" id="notifSubject" placeholder="Ex: Mise à jour ONTRACK v2.1 — Nouvelles fonctionnalités" style="width:100%;box-sizing:border-box;">
+    <input type="text" id="notifSubject" placeholder="Ex: Mise à jour TechFleet v2.1 — Nouvelles fonctionnalités" style="width:100%;box-sizing:border-box;">
   </div>
   <div class="fg">
     <label>Message <span style="color:var(--red)">*</span></label>
@@ -1158,7 +1158,7 @@ function saveFbTokens(idToken, refreshToken, expiresIn){
   if(sess){ sess.fbIdToken=idToken; sess.fbRefreshToken=refreshToken; sess.fbTokenExpiry=_fbTokenExpiry; setSession(sess); }
 }
 
-// Créer une session ONTRACK en préservant les tokens Firebase Auth
+// Créer une session TechFleet en préservant les tokens Firebase Auth
 function makeSession(email, tok, base, platform, loginAt){
   return {
     email, tok, base, platform,
@@ -1368,7 +1368,7 @@ const setBases=async b=>{ _basesCache=b; await FB.set(currentPlatform+'__bases',
 let currentBase='SGO'; // id of active base
 let currentPlatform='ZA'; // id of active platform
 let _platformsCache=null;
-const DEFAULT_PLATFORMS=[{id:'ZA',name:'ONTRACK (ZA)',color:'#f0a500'},{id:'ENT',name:'ONTRACK (ENT)',color:'#4a9eff'}];
+const DEFAULT_PLATFORMS=[{id:'ZA',name:'Plateforme A',color:'#f0a500'},{id:'ENT',name:'Plateforme B',color:'#4a9eff'}];
 const getPlatforms=()=>_platformsCache||DEFAULT_PLATFORMS;
 const setPlatforms=async p=>{ _platformsCache=p; await FB.set('platforms',p); };
 
@@ -1383,7 +1383,7 @@ const setUsers=async u=>{
     // Vérifier s'il y a déjà des users dans Firebase avant d'écraser
     const existing = await FB.get(uKey()).catch(()=>null);
     if(existing && Array.isArray(existing) && existing.length > 0){
-      console.warn("[ONTRACK] setUsers: tentative d ecraser avec tableau vide bloquee.");
+      console.warn("[TechFleet] setUsers: tentative d ecraser avec tableau vide bloquee.");
       return; // Ne pas écraser
     }
   }
@@ -1631,7 +1631,7 @@ function renderAccountPicker(){
     return;
   }
   el.innerHTML=filtered.map((s,i)=>{
-    const b=bases.find(x=>x.id===s.base)||{name:s.base||'ONTRACK',color:'#f0a500'};
+    const b=bases.find(x=>x.id===s.base)||{name:s.base||'TechFleet',color:'#f0a500'};
     const initials=s.email.substring(0,2).toUpperCase();
     const roleLabel=s.role==='admin'?'Administrateur':s.role==='superuser'?'Super User':s.role==='tech'?'Technicien':'Utilisateur';
     const origIdx=stored.indexOf(s);
@@ -2563,7 +2563,7 @@ async function doSetup(){
 
 // ═══════════════════ FIRST LOGIN (pending user sets password) ═══════════════════
 // L'admin a invité l'user via Firebase Auth → il se connecte directement avec son nouveau mot de passe
-// Ce screen s'affiche si le statut est encore "pending" dans la DB ONTRACK
+// Ce screen s'affiche si le statut est encore "pending" dans la DB
 async function doFirstLogin(){
   const em=document.getElementById('fi_email').value.trim();
   const pw=document.getElementById('fi_pw').value;
@@ -2590,7 +2590,7 @@ async function doFirstLogin(){
   const users = getUsers();
   const u = users.find(u=>u.email===em);
   if(!u){err.textContent=T().errNoInvite;err.classList.add('on');if(btn){btn.disabled=false;btn.textContent='Activer';}return;}
-  // Activer le compte dans ONTRACK
+  // Activer le compte
   const tok=uid();
   const pwHash=await hash(pw);
   u.h=pwHash; u.status='active';
@@ -2620,7 +2620,7 @@ async function doLogin(){
   try{
     await fbSignIn(em, pw);
   } catch(fbErr){
-    // Firebase Auth a échoué → tenter migration depuis ancien hash ONTRACK
+    // Firebase Auth a échoué → tenter migration depuis ancien hash
     // Pour ça on a besoin de lire la DB → utiliser un accès temporaire sans auth
     // en vérifiant le hash localement si le cache existe
     const isWrongPw = fbErr.message==='INVALID_LOGIN_CREDENTIALS' || fbErr.message==='INVALID_PASSWORD' || fbErr.message==='EMAIL_NOT_FOUND';
@@ -2634,7 +2634,7 @@ async function doLogin(){
         catch(e2){
           if(btn){btn.disabled=false;btn.textContent=T().btnLogin||'Connexion';}
           if(e2.message==='EMAIL_EXISTS'){
-            err.textContent='Mot de passe Firebase different du mot de passe ONTRACK. Utilisez "Mot de passe oublié".';
+            err.textContent='Mot de passe Firebase different du mot de passe existant. Utilisez "Mot de passe oublié".';
           } else {
             err.textContent='Erreur : '+e2.message;
           }
@@ -2663,7 +2663,7 @@ async function doLogin(){
   if(fbUsers && Array.isArray(fbUsers) && fbUsers.length) _usersCache = fbUsers;
   const users = getUsers();
 
-  // Vérifier que cet email est bien autorisé dans ONTRACK
+  // Vérifier que cet email est bien autorisé
   const blocked = users.find(x=>x.email===em && x.status==='blocked');
   if(blocked){
     _fbIdToken=null;_fbRefreshToken=null;
@@ -2685,7 +2685,7 @@ async function doLogin(){
     users.push(u); _usersCache = users; await FB.set(uKey(), users);
   }
 
-  // ── ÉTAPE 3 : Session ONTRACK ─────────────────────────────────────
+  // ── ÉTAPE 3 : Session ─────────────────────────────────────
   const tok=uid();
   const _loginAt = Date.now();
   // Sauvegarder la dernière connexion dans le profil utilisateur
@@ -2988,7 +2988,7 @@ async function addUser(){ if(!canDo('manageUsers')){alert('Accès refusé.');ret
     msg.textContent='Compte créé mais email non envoyé : '+e.message;msg.classList.add('err');return;
   }
 
-  // 3. Ajouter dans la DB ONTRACK
+  // 3. Ajouter dans la DB
   users.push({email:em,h:null,role:newRole,status:'pending',tok:null});
   await setUsers(users);
   document.getElementById('apUemail').value='';
@@ -3343,7 +3343,7 @@ const validEmail=e=>/^[^@]+@[^@]+\.[^@]+$/.test(e);
 // ═══════════════════ I18N ═══════════════════
 const LANGS={
 fr:{
-  appTitle:'ONTRACK - Gestion de Flotte',tF:'🚛 Flotte',tI:'🔧 Interventions',tB:'📊 Bilan',tP:'🏆 Performance',tSIM:'📱 SIM',tSIM:'📱 SIM',
+  appTitle:'TechFleet - Gestion de Flotte',tF:'🚛 Flotte',tI:'🔧 Interventions',tB:'📊 Bilan',tP:'🏆 Performance',tSIM:'📱 SIM',tSIM:'📱 SIM',
   lVeh:'Véhicules',btnAV:'+ Ajouter',srchPh:'Rechercher…',
   noVeh:'Aucun véhicule',noRes:'Aucun résultat',
   esT:'Sélectionnez un véhicule',esD:'Choisissez un véhicule ou ajoutez-en un nouveau.',
@@ -3374,7 +3374,7 @@ fr:{
   pwStr:['Très faible','Faible','Moyen','Fort','Très fort'],
   suTit:'Bienvenue !',suSub:'Créez votre compte administrateur.',suBtn:'Créer mon compte',
   fiTit:'Bienvenue !',fiSub:'Votre accès a été créé. Choisissez maintenant votre mot de passe.',fiBtn:'Créer mon mot de passe',
-  liTit:'Connexion',liSub:'ONTRACK Gestion de Flotte.',liBtn:'Se connecter',
+  liTit:'Connexion',liSub:'TechFleet Gestion de Flotte.',liBtn:'Se connecter',
   lLe:'Adresse e-mail',lLp:'Mot de passe',lLp2:'Confirmer le mot de passe',lLpc:'Choisissez un mot de passe',
   errEmail:'Adresse e-mail invalide.',errShort:'Minimum 6 caractères.',errMatch:'Les mots de passe ne correspondent pas.',
   errFail:n=>`Identifiants incorrects. ${n} tentative(s) restante(s).`,errLocked:'Compte bloqué 5 minutes.',
@@ -3402,7 +3402,7 @@ fr:{
   swTip:'Changer de compte',
 },
 en:{
-  appTitle:'ONTRACK - Fleet Management',tF:'🚛 Fleet',tI:'🔧 Interventions',tB:'📊 Summary',tP:'🏆 Performance',tSIM:'📱 SIM',tSIM:'📱 SIM',
+  appTitle:'TechFleet - Fleet Management',tF:'🚛 Fleet',tI:'🔧 Interventions',tB:'📊 Summary',tP:'🏆 Performance',tSIM:'📱 SIM',tSIM:'📱 SIM',
   lVeh:'Vehicles',btnAV:'+ Add',srchPh:'Search…',
   noVeh:'No vehicles',noRes:'No results',
   esT:'Select a vehicle',esD:'Choose a vehicle from the list or add a new one.',
@@ -3433,7 +3433,7 @@ en:{
   pwStr:['Very weak','Weak','Fair','Strong','Very strong'],
   suTit:'Welcome!',suSub:'Create your administrator account to get started.',suBtn:'Create account',
   fiTit:'Welcome!',fiSub:'Your access has been created. Please choose a password to continue.',fiBtn:'Create my password',
-  liTit:'Sign In',liSub:'ONTRACK Gestion de Flotte.',liBtn:'Sign in',
+  liTit:'Sign In',liSub:'TechFleet Gestion de Flotte.',liBtn:'Sign in',
   lLe:'Email address',lLp:'Password',lLp2:'Confirm password',lLpc:'Choose a password',
   errEmail:'Invalid email address.',errShort:'Minimum 6 characters.',errMatch:'Passwords do not match.',
   errFail:n=>`Wrong credentials. ${n} attempt(s) remaining.`,errLocked:'Account locked for 5 minutes.',
@@ -3758,7 +3758,7 @@ async function checkPendingPush(){
   );
 
   for(const n of myNotifs){
-    new Notification(n.title||'ONTRACK', {
+    new Notification(n.title||'TechFleet', {
       body: n.body||'',
       icon: '/Ontrack/icon-192.png',
       tag: n.tag||'ontrack'
@@ -3934,7 +3934,7 @@ async function migrateUsersToSharedStore(){
   const users = Object.values(merged);
   if(users.length > 0){
     await FB.set(sharedKey, users);
-    console.log('[ONTRACK] Migration users → '+sharedKey+' : '+users.length+' utilisateurs consolidés');
+    console.log('[TechFleet] Migration users → '+sharedKey+' : '+users.length+' utilisateurs consolidés');
   }
 }
 
@@ -4174,17 +4174,17 @@ function initConfig(){
     const legacyCfg=localStorage.getItem(bKey('config'));
     if(legacyFleet){
       const parsed=JSON.parse(legacyFleet);
-      if(parsed?.vehicles?.length){ FB.set(bKey('fleet'),parsed); console.log('[ONTRACK] Migration flotte localStorage → Firebase ✓'); }
+      if(parsed?.vehicles?.length){ FB.set(bKey('fleet'),parsed); console.log('[TechFleet] Migration flotte localStorage → Firebase ✓'); }
       localStorage.removeItem(bKey('fleet'));
     }
     if(legacyUsers){
       const parsed=JSON.parse(legacyUsers);
-      if(parsed?.length){ FB.set(uKey(),parsed); console.log('[ONTRACK] Migration users localStorage → Firebase ✓'); }
+      if(parsed?.length){ FB.set(uKey(),parsed); console.log('[TechFleet] Migration users localStorage → Firebase ✓'); }
       localStorage.removeItem(uKey());
     }
     if(legacyCfg){
       const parsed=JSON.parse(legacyCfg);
-      if(parsed){ FB.set(bKey('config'),parsed); console.log('[ONTRACK] Migration config localStorage → Firebase ✓'); }
+      if(parsed){ FB.set(bKey('config'),parsed); console.log('[TechFleet] Migration config localStorage → Firebase ✓'); }
       localStorage.removeItem(bKey('config'));
     }
   }catch(e){}
@@ -4729,7 +4729,7 @@ function openQR(vid){
   const allI = data.interventions.filter(i=>i.vehicleId===vid).sort((a,b)=>new Date(b.date)-new Date(a.date));
   const last = allI[0];
   const NL = '\n';
-  let qrText = 'ONTRACK GESTION DE FLOTTE' + NL
+  let qrText = 'TECHFLEET GESTION DE FLOTTE' + NL
     + 'Vehicule : ' + v.name + NL
     + 'Plaque   : ' + (v.plate||'N/A') + NL
     + 'Type     : ' + (v.type||'N/A') + NL + NL;
@@ -4976,7 +4976,7 @@ function generateReport(){
   const html=`<!DOCTYPE html>
 <html lang="fr"><head>
 <meta charset="UTF-8">
-<title>ONTRACK — Rapport ${from} → ${to}</title>
+<title>TechFleet — Rapport ${from} → ${to}</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0;}
   body{font-family:'Segoe UI',Arial,sans-serif;background:#0d0f14;color:#e8eaf0;padding:0;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
@@ -4995,7 +4995,7 @@ function generateReport(){
   <!-- HEADER -->
   <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:32px;">
     <div>
-      <div style="font-size:28px;font-weight:900;color:#d4870a;letter-spacing:-1px;">ONTRACK</div>
+      <div style="font-size:28px;font-weight:900;color:#d4870a;letter-spacing:-1px;">TechFleet</div>
       <div style="font-size:11px;color:#6b7280;letter-spacing:3px;font-weight:700;text-transform:uppercase;">Gestion de Flotte</div>
       <div style="margin-top:12px;font-size:20px;font-weight:800;color:#fff;">Rapport d'activité</div>
       <div style="color:#6b7280;font-size:12px;margin-top:4px;">Période : <b style="color:#e8eaf0">${fmt(from)}</b> → <b style="color:#e8eaf0">${fmt(to)}</b></div>
@@ -5022,7 +5022,7 @@ function generateReport(){
   ${sections_html}
 
   <div style="margin-top:40px;padding-top:16px;border-top:1px solid #2a2d36;font-size:10px;color:#6b7280;text-align:center;">
-    ONTRACK Gestion de Flotte &nbsp;·&nbsp; Rapport généré le ${fmt(new Date())} &nbsp;·&nbsp; ${currentUser?.email||''}
+    TechFleet Gestion de Flotte &nbsp;·&nbsp; Rapport généré le ${fmt(new Date())} &nbsp;·&nbsp; ${currentUser?.email||''}
   </div>
 </div>
 `;
@@ -5115,7 +5115,7 @@ function generateReportTech(){
   const html=`<!DOCTYPE html>
 <html lang="fr"><head>
 <meta charset="UTF-8">
-<title>ONTRACK — Rapport Technicien : ${tech}</title>
+<title>TechFleet — Rapport Technicien : ${tech}</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0;}
   body{font-family:'Segoe UI',Arial,sans-serif;background:#0d0f14;color:#e8eaf0;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
@@ -5132,7 +5132,7 @@ function generateReportTech(){
   <!-- EN-TÊTE -->
   <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:28px;">
     <div>
-      <div style="font-size:28px;font-weight:900;color:#f0a500;letter-spacing:-1px;">ONTRACK</div>
+      <div style="font-size:28px;font-weight:900;color:#f0a500;letter-spacing:-1px;">TechFleet</div>
       <div style="font-size:10px;color:#6b7280;letter-spacing:3px;text-transform:uppercase;margin-bottom:10px;">Gestion de Flotte</div>
       <div style="font-size:11px;color:#f0a500;letter-spacing:2px;text-transform:uppercase;font-weight:700;margin-bottom:4px;">Rapport Technicien</div>
       <div style="font-size:26px;font-weight:900;color:#fff;margin-bottom:8px;">👷 ${tech}</div>
@@ -5190,7 +5190,7 @@ function generateReportTech(){
   </table>`:''}
 
   <div style="margin-top:40px;padding-top:16px;border-top:1px solid #2a2d36;font-size:10px;color:#6b7280;text-align:center;">
-    ONTRACK Gestion de Flotte &nbsp;·&nbsp; Rapport Technicien : ${tech} &nbsp;·&nbsp; Généré le ${fmt(new Date())} &nbsp;·&nbsp; ${currentUser?.email||''}
+    TechFleet Gestion de Flotte &nbsp;·&nbsp; Rapport Technicien : ${tech} &nbsp;·&nbsp; Généré le ${fmt(new Date())} &nbsp;·&nbsp; ${currentUser?.email||''}
   </div>
 </div>
 </body></html>`;
@@ -6297,7 +6297,7 @@ async function sendNotifEmails(){
         to_name:  user.email.split('@')[0],
         subject:  subject,
         message:  body,
-        from_name:'ONTRACK Gestion de Flotte',
+        from_name:'TechFleet Gestion de Flotte',
         base_name: getCfg()?.baseName || currentBase,
         sent_by:  currentUser.email,
         sent_date: new Date().toLocaleDateString('fr-FR')
