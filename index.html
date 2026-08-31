@@ -3075,6 +3075,13 @@ function loadBaseData(skipRender){
   data={vehicles:[],interventions:[]};
   _usersCache=null;
   _cfgCache=null;
+  // Recharger les bases depuis Firebase pour s'assurer qu'elles sont toutes visibles
+  FB.get(currentPlatform+'__bases').then(fbBases=>{
+    if(fbBases && fbBases.length){
+      _basesCache = fbBases;
+      renderBaseBar(); // Mettre à jour la barre des bases avec toutes les bases
+    }
+  }).catch(()=>{});
   // Clé de cache incluant la plateforme pour éviter les mélanges
   const fleetPath = bKey('fleet');
   const cacheKey = 'ot_cache_' + currentPlatform + '_' + fleetPath;
