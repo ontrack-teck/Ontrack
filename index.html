@@ -3065,7 +3065,10 @@ const saveCfg=async cfg=>{
   try{ await FB.set(path,cfg); }finally{ FB.unlockWrite(path); }
 };
 function loadBaseData(skipRender){
-  selVid=null;editVid=null;curYear=new Date().getFullYear();curTab='flotte';
+  selVid=null;editVid=null;curYear=new Date().getFullYear();
+  // Sauvegarder l'onglet actif pour le restaurer après chargement Firebase
+  const _savedTab = localStorage.getItem('sgo_tab') || 'flotte';
+  curTab='flotte'; // Mettre flotte par défaut le temps du chargement
   Object.values(charts).forEach(ch=>{try{ch.destroy();}catch(e){}});charts={};
   // Arrêter TOUS les anciens polls et vider leurs caches
   Object.keys(FB._polls).forEach(p=>{ clearInterval(FB._polls[p]); delete FB._polls[p]; });
@@ -3106,7 +3109,15 @@ function loadBaseData(skipRender){
     data = {vehicles, interventions};
     FB._lastVal[fleetPath] = JSON.stringify({vehicles, interventions});
     sessionStorage.setItem(cacheKey, JSON.stringify({vehicles, interventions}));
+    // Restaurer l'onglet actif sauvegardé avant de rendre
+    if(_savedTab && _savedTab !== 'flotte'){
+      curTab = _savedTab;
+    }
     render();
+    // Re-rendre les onglets spéciaux qui ne sont pas couverts par render()
+    if(curTab==='imei') renderIMEITab();
+    if(curTab==='logs') renderLogsTab();
+    if(curTab==='stock') renderStockTab();
   });
   // 3) Polling 30s — sync silencieuse
   FB._polls[fleetPath] = setInterval(async () => {
