@@ -2054,6 +2054,11 @@ function renderImeiTracking(){
   </div>`;
 }
 
+function toggleStockImeiList(itemId){
+  const el = document.getElementById('imeiList_'+itemId);
+  if(el) el.style.display = el.style.display==='none'?'block':'none';
+}
+
 function toggleImeiDetail(imei){
   const id = 'detail_' + imei.replace(/[^a-z0-9]/gi,'_');
   const el = document.getElementById(id);
@@ -2167,9 +2172,16 @@ function renderStockUI(stock){
     const qtyColor = isOut?'#e05a2b':isLow?'#ff9f43':'#2ec97b';
     const badge = isOut?'<span style="background:rgba(224,90,43,.15);color:#e05a2b;font-size:10px;font-weight:700;padding:2px 7px;border-radius:6px;margin-left:6px">RUPTURE</span>':
                   isLow?'<span style="background:rgba(255,159,67,.15);color:#ff9f43;font-size:10px;font-weight:700;padding:2px 7px;border-radius:6px;margin-left:6px">STOCK BAS</span>':'';
+    // Afficher les IMEI pour les balises GPS
+    const imeiCount = (i.imeis||[]).length;
+    const imeiInfo = i.category==='gps' && imeiCount>0
+      ? `<div style="margin-top:4px"><span onclick="toggleStockImeiList('${i.id}')" style="font-size:10px;color:#4a9eff;cursor:pointer;font-family:'DM Mono',monospace">📡 ${imeiCount} IMEI enregistré(s) ▾</span>
+         <div id="imeiList_${i.id}" style="display:none;margin-top:4px;max-height:120px;overflow-y:auto">
+           ${(i.imeis||[]).map((imei,idx)=>`<div style="font-size:11px;font-family:'DM Mono',monospace;color:#4a9eff;padding:2px 0">#${idx+1} ${imei}</div>`).join('')}
+         </div></div>` : '';
     return `<tr>
       <td><span style="font-size:16px">${cat.icon}</span></td>
-      <td style="font-weight:700">${i.name}${badge}</td>
+      <td style="font-weight:700">${i.name}${badge}${imeiInfo}</td>
       <td><span style="background:${cat.color}22;color:${cat.color};padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700">${cat.label}</span></td>
       <td style="font-family:'DM Mono',monospace;font-size:16px;font-weight:800;color:${qtyColor}">${i.qty}</td>
       <td style="color:var(--muted);font-size:12px">${i.unit||'unité(s)'}</td>
@@ -2248,21 +2260,62 @@ function renderStockMovements(movements){
 
 // ─── MODALES STOCK ────────────────────────────────────────
 function openAddStockItem(){
-  const html = `<div class="mo open" id="moStock"><div class="md" style="max-width:380px">
+  const html = `<div class="mo open" id="moStock"><div class="md" style="max-width:420px;max-height:90vh;overflow-y:auto;">
     <div class="mh"><span style="font-weight:800;font-size:15px">📦 Nouvel article</span><button class="mcl" onclick="closeMo('moStock')">✕</button></div>
     <div class="fg"><label>Nom de l'article *</label><input type="text" id="stName" placeholder="Ex: Balise MIX4000" style="width:100%;box-sizing:border-box"></div>
-    <div class="fg"><label>Catégorie *</label><select id="stCat" style="width:100%">
+    <div class="fg"><label>Catégorie *</label><select id="stCat" onchange="toggleStockImeiZone()" style="width:100%">
       ${Object.entries(STOCK_CATEGORIES).map(([k,v])=>`<option value="${k}">${v.icon} ${v.label}</option>`).join('')}
     </select></div>
-    <div class="fg"><label>Quantité initiale *</label><input type="number" id="stQty" value="0" min="0" style="width:100%;box-sizing:border-box"></div>
+    <div class="fg"><label>Quantité initiale *</label><input type="number" id="stQty" value="0" min="0" oninput="updateStockImeiFields()" style="width:100%;box-sizing:border-box"></div>
     <div class="fg"><label>Unité</label><input type="text" id="stUnit" placeholder="unité(s), pcs, carte..." style="width:100%;box-sizing:border-box"></div>
     <div class="fg"><label>Alerte stock bas (quantité min)</label><input type="number" id="stMin" value="5" min="0" style="width:100%;box-sizing:border-box"></div>
+    <!-- Zone IMEI — visible uniquement pour les balises GPS -->
+    <div id="stImeiZone" style="display:none;">
+      <div style="border-top:1px solid var(--border);margin:12px 0;padding-top:12px;">
+        <div style="font-size:12px;font-weight:700;color:#4a9eff;margin-bottom:10px;">📡 IMEI des balises (optionnel)</div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">Renseignez les IMEI de chaque balise pour la traçabilité. Le nombre de champs suit la quantité saisie.</div>
+        <div id="stImeiFields"></div>
+      </div>
+    </div>
     <div style="display:flex;gap:10px;margin-top:16px">
       <button class="abtn" onclick="saveStockItem()" style="flex:1">Enregistrer</button>
       <button class="mcan" onclick="closeMo('moStock')" style="flex:1">Annuler</button>
     </div>
   </div></div>`;
   document.body.insertAdjacentHTML('beforeend', html);
+}
+
+function toggleStockImeiZone(){
+  const cat = document.getElementById('stCat')?.value;
+  const zone = document.getElementById('stImeiZone');
+  if(zone) zone.style.display = cat === 'gps' ? '' : 'none';
+  if(cat === 'gps') updateStockImeiFields();
+}
+
+function updateStockImeiFields(){
+  const cat = document.getElementById('stCat')?.value;
+  if(cat !== 'gps') return;
+  const qty = parseInt(document.getElementById('stQty')?.value) || 0;
+  const container = document.getElementById('stImeiFields');
+  if(!container) return;
+  // Limiter à 50 champs max pour éviter une surcharge
+  const count = Math.min(qty, 50);
+  // Conserver les valeurs déjà saisies
+  const existing = Array.from(container.querySelectorAll('input')).map(i=>i.value);
+  container.innerHTML = count === 0 ? '<div style="color:var(--muted);font-size:11px">Saisissez une quantité pour afficher les champs IMEI</div>' :
+    Array.from({length:count}, (_,i) => `
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+        <span style="font-size:11px;color:var(--muted);min-width:24px;text-align:right">#${i+1}</span>
+        <input type="text" id="stImei_${i}" maxlength="15"
+          placeholder="IMEI ${i+1} (15 chiffres)"
+          oninput="this.value=this.value.replace(/[^0-9]/g,'')"
+          value="${existing[i]||''}"
+          style="flex:1;font-family:'DM Mono',monospace;font-size:12px;letter-spacing:1px;padding:6px 8px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);">
+        ${existing[i]&&existing[i].length===15?'<span style="color:#2ec97b;font-size:14px">✓</span>':''}
+      </div>`).join('');
+  if(qty > 50){
+    container.innerHTML += `<div style="color:#ff9f43;font-size:11px;margin-top:6px">⚠️ Maximum 50 IMEI par ajout. Pour plus, faites plusieurs ajouts.</div>`;
+  }
 }
 
 async function saveStockItem(){
@@ -2272,8 +2325,41 @@ async function saveStockItem(){
   const unit = document.getElementById('stUnit')?.value.trim()||'unité(s)';
   const minAlert = parseInt(document.getElementById('stMin')?.value)||5;
   if(!name){alert('Nom requis.');return;}
+
+  // Collecter les IMEI saisis pour les balises GPS
+  let imeis = [];
+  if(cat === 'gps' && qty > 0){
+    const count = Math.min(qty, 50);
+    for(let i=0; i<count; i++){
+      const inp = document.getElementById('stImei_'+i);
+      const val = inp?.value.trim()||'';
+      if(val.length===15) imeis.push(val);
+      else if(val.length>0 && val.length!==15){
+        alert('IMEI #'+(i+1)+' invalide — 15 chiffres requis. Laissez vide pour ignorer.');
+        return;
+      }
+    }
+    // Vérifier les doublons avec le stock existant
+    const stock0 = await getStock();
+    const allExistingImeis = stock0.items.flatMap(i=>i.imeis||[]);
+    const dupImei = imeis.find(imei=>allExistingImeis.includes(imei));
+    if(dupImei){alert('IMEI '+dupImei+' déjà enregistré dans le stock.');return;}
+  }
+
   const stock = await getStock();
-  stock.items.push({id:uid(),name,category:cat,qty,unit,minAlert,createdAt:new Date().toISOString(),createdBy:currentUser?.email});
+  const newItem = {id:uid(),name,category:cat,qty,unit,minAlert,createdAt:new Date().toISOString(),createdBy:currentUser?.email};
+  if(imeis.length) newItem.imeis = imeis;
+  stock.items.push(newItem);
+
+  // Créer un mouvement d'entrée en stock
+  if(qty>0){
+    stock.movements = [...(stock.movements||[]), {
+      id:uid(), itemId:newItem.id, itemName:name, delta:qty, qty,
+      date:new Date().toISOString(), reason:'Stock initial',
+      base:currentBase, user:currentUser?.email
+    }].slice(-1000);
+  }
+
   await saveStock(stock);
   closeMo('moStock');
   renderStockUI(stock);
@@ -2282,17 +2368,43 @@ async function saveStockItem(){
 function openStockAdjust(itemId){
   const item = (_stockCache?.items||[]).find(i=>i.id===itemId);
   if(!item) return;
-  const html = `<div class="mo open" id="moStockAdj"><div class="md" style="max-width:350px">
+  const existingImeis = item.imeis||[];
+  const isGps = item.category==='gps';
+  const html = `<div class="mo open" id="moStockAdj"><div class="md" style="max-width:420px;max-height:90vh;overflow-y:auto;">
     <div class="mh"><span style="font-weight:800;font-size:15px">± Ajuster le stock</span><button class="mcl" onclick="closeMo('moStockAdj')">✕</button></div>
     <div style="font-size:13px;color:var(--muted);margin-bottom:12px">Article : <b style="color:var(--text)">${item.name}</b> — Stock actuel : <b style="color:var(--accent)">${item.qty}</b> ${item.unit}</div>
-    <div class="fg"><label>Nouvelle quantité *</label><input type="number" id="adjQty" value="${item.qty}" min="0" style="width:100%;box-sizing:border-box"></div>
+    <div class="fg"><label>Nouvelle quantité *</label><input type="number" id="adjQty" value="${item.qty}" min="0" oninput="updateAdjImeiFields(${JSON.stringify(existingImeis)},${isGps})" style="width:100%;box-sizing:border-box"></div>
     <div class="fg"><label>Raison (optionnel)</label><input type="text" id="adjReason" placeholder="Réapprovisionnement, inventaire..." style="width:100%;box-sizing:border-box"></div>
+    ${isGps?`<div id="adjImeiZone" style="border-top:1px solid var(--border);margin-top:12px;padding-top:12px;">
+      <div style="font-size:12px;font-weight:700;color:#4a9eff;margin-bottom:8px">📡 IMEI enregistrés (${existingImeis.length}/${item.qty})</div>
+      ${existingImeis.length?`<div style="max-height:120px;overflow-y:auto;margin-bottom:10px">${existingImeis.map((imei,i)=>`<div style="font-size:11px;font-family:'DM Mono',monospace;color:#4a9eff;padding:2px 0">#${i+1} ${imei}</div>`).join('')}</div>`:''}
+      <div style="font-size:11px;color:var(--muted);margin-bottom:8px">Nouveaux IMEI à ajouter (si réapprovisionnement) :</div>
+      <div id="adjImeiFields"></div>
+    </div>`:''}
     <div style="display:flex;gap:10px;margin-top:16px">
       <button class="abtn" onclick="applyStockAdjust('${itemId}')" style="flex:1">Enregistrer</button>
       <button class="mcan" onclick="closeMo('moStockAdj')" style="flex:1">Annuler</button>
     </div>
   </div></div>`;
   document.body.insertAdjacentHTML('beforeend', html);
+}
+
+function updateAdjImeiFields(existingImeis, isGps){
+  if(!isGps) return;
+  const newQty = parseInt(document.getElementById('adjQty')?.value)||0;
+  const currentQty = existingImeis.length;
+  const delta = Math.max(0, newQty - currentQty);
+  const container = document.getElementById('adjImeiFields');
+  if(!container) return;
+  if(delta===0){container.innerHTML='<div style="font-size:11px;color:var(--muted)">Pas de nouvelles balises à enregistrer.</div>';return;}
+  container.innerHTML = Array.from({length:Math.min(delta,50)}, (_,i)=>`
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+      <span style="font-size:11px;color:var(--muted);min-width:24px;text-align:right">#${currentQty+i+1}</span>
+      <input type="text" id="adjImei_${i}" maxlength="15"
+        placeholder="IMEI ${currentQty+i+1} (15 chiffres)"
+        oninput="this.value=this.value.replace(/[^0-9]/g,'')"
+        style="flex:1;font-family:'DM Mono',monospace;font-size:12px;letter-spacing:1px;padding:6px 8px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);">
+    </div>`).join('');
 }
 
 async function applyStockAdjust(itemId){
@@ -2302,6 +2414,24 @@ async function applyStockAdjust(itemId){
   const item = stock.items.find(i=>i.id===itemId);
   if(!item) return;
   const delta = newQty - item.qty;
+  // Collecter les nouveaux IMEI si balise GPS
+  if(item.category==='gps' && delta>0){
+    const newImeis = [];
+    for(let i=0; i<Math.min(delta,50); i++){
+      const inp = document.getElementById('adjImei_'+i);
+      const val = inp?.value.trim()||'';
+      if(val.length===15) newImeis.push(val);
+      else if(val.length>0 && val.length!==15){
+        alert('IMEI #'+(i+1)+' invalide — 15 chiffres requis. Laissez vide pour ignorer.');
+        return;
+      }
+    }
+    // Vérifier les doublons
+    const allExisting = stock.items.flatMap(i=>i.imeis||[]);
+    const dup = newImeis.find(imei=>allExisting.includes(imei));
+    if(dup){alert('IMEI '+dup+' déjà enregistré dans le stock.');return;}
+    if(newImeis.length) item.imeis = [...(item.imeis||[]), ...newImeis];
+  }
   item.qty = newQty;
   stock.movements = [...(stock.movements||[]), {
     id:uid(), itemId, itemName:item.name, delta, qty:newQty,
