@@ -1043,6 +1043,8 @@ tbody td{padding:11px 17px;font-size:12px;}
               <option value="install">Installations</option>
               <option value="desinstall">Désinstallations</option>
               <option value="piece">Changement de pièce</option>
+              <option value="indisponible">🧊 Indisponible</option>
+              <option value="disponible">✅ Disponible</option>
               <option value="other">Autre</option>
             </select>
           </div>
@@ -3302,7 +3304,9 @@ function ensureNewItypes(){
   const cfg = getCfg();
   if(!cfg?.itypes) return;
   const newTypes = [
-    {"key": "Transfert de balise", "color": "#ff9f43", "group": "transfert"}
+    {"key": "Transfert de balise", "color": "#ff9f43", "group": "transfert"},
+    {"key": "Indisponible", "color": "#e74c3c", "group": "indisponible"},
+    {"key": "Disponible", "color": "#2ec97b", "group": "disponible"}
   ];
   let changed = false;
   newTypes.forEach(nt => {
@@ -4139,7 +4143,7 @@ function deleteBase(i){
 // ══════════════════════════════════════════════
 
 // ── DEFAULT CONFIG (used if no custom config saved) ──
-const DEFAULT_ITYPES=[{"key": "Installation MIX4000", "color": "#f0a500", "group": "install"}, {"key": "Installation Kit ADplus + MIX4000", "color": "#ffcc44", "group": "install"}, {"key": "Installation REMORA", "color": "#4a9eff", "group": "install"}, {"key": "Installation GH 5200", "color": "#70a1ff", "group": "install"}, {"key": "Désinstallation MIX4000", "color": "#c0392b", "group": "desinstall"}, {"key": "Désinstallation ADplus + MIX4000", "color": "#e74c3c", "group": "desinstall"}, {"key": "Désinstallation REMORA", "color": "#d35400", "group": "desinstall"}, {"key": "SIM CARD 500Mo", "color": "#2ec97b", "group": "piece"}, {"key": "SIM CARD 2Go", "color": "#00c9b1", "group": "piece"}, {"key": "RELAIS", "color": "#e05a2b", "group": "piece"}, {"key": "BALISE", "color": "#ff6b9d", "group": "piece"}, {"key": "CAMÉRA", "color": "#9b6dff", "group": "piece"}, {"key": "SHOCKET", "color": "#ff4757", "group": "piece"}, {"key": "HARNAIS", "color": "#ff9f43", "group": "piece"}, {"key": "PANIC", "color": "#ee5a24", "group": "piece"}, {"key": "DSM", "color": "#a29bfe", "group": "piece"}, {"key": "Investigation", "color": "#747d8c", "group": "other"}, {"key": "Transfert de balise", "color": "#ff9f43", "group": "transfert"}];
+const DEFAULT_ITYPES=[{"key": "Installation MIX4000", "color": "#f0a500", "group": "install"}, {"key": "Installation Kit ADplus + MIX4000", "color": "#ffcc44", "group": "install"}, {"key": "Installation REMORA", "color": "#4a9eff", "group": "install"}, {"key": "Installation GH 5200", "color": "#70a1ff", "group": "install"}, {"key": "Désinstallation MIX4000", "color": "#c0392b", "group": "desinstall"}, {"key": "Désinstallation ADplus + MIX4000", "color": "#e74c3c", "group": "desinstall"}, {"key": "Désinstallation REMORA", "color": "#d35400", "group": "desinstall"}, {"key": "SIM CARD 500Mo", "color": "#2ec97b", "group": "piece"}, {"key": "SIM CARD 2Go", "color": "#00c9b1", "group": "piece"}, {"key": "RELAIS", "color": "#e05a2b", "group": "piece"}, {"key": "BALISE", "color": "#ff6b9d", "group": "piece"}, {"key": "CAMÉRA", "color": "#9b6dff", "group": "piece"}, {"key": "SHOCKET", "color": "#ff4757", "group": "piece"}, {"key": "HARNAIS", "color": "#ff9f43", "group": "piece"}, {"key": "PANIC", "color": "#ee5a24", "group": "piece"}, {"key": "DSM", "color": "#a29bfe", "group": "piece"}, {"key": "Investigation", "color": "#747d8c", "group": "other"}, {"key": "Transfert de balise", "color": "#ff9f43", "group": "transfert"}, {"key": "Indisponible", "color": "#e74c3c", "group": "indisponible"}, {"key": "Disponible", "color": "#2ec97b", "group": "disponible"}];
 const DEFAULT_VTYPES_FR=["Camion", "Fourgon", "Voiture", "Engin TP", "Remorque", "Autre"];
 const DEFAULT_VTYPES_EN=["Truck", "Van", "Car", "Heavy equipment", "Trailer", "Other"];
 
@@ -4226,11 +4230,11 @@ function populateSels(){
   // Intervention types from config
   const is=document.getElementById('iType');if(!is)return;
   const itypes=cfg?.itypes||DEFAULT_ITYPES;
-  const groups={install:[],desinstall:[],piece:[],other:[],transfert:[]};
+  const groups={install:[],desinstall:[],piece:[],other:[],transfert:[],indisponible:[],disponible:[]};
   itypes.forEach(t=>{ if(groups[t.group])groups[t.group].push(t); else groups.other.push(t); });
-  const grpLabel={install:L.grpI,desinstall:L.grpD,piece:L.grpP,other:L.grpO,transfert:'🔄 Transfert'};
+  const grpLabel={install:L.grpI,desinstall:L.grpD,piece:L.grpP,other:L.grpO,transfert:'🔄 Transfert',indisponible:'🧊 Indisponible',disponible:'✅ Disponible'};
   let html='';
-  ['install','desinstall','piece','transfert','other'].forEach(g=>{
+  ['install','desinstall','piece','transfert','indisponible','disponible','other'].forEach(g=>{
     if(groups[g].length){
       html+=`<optgroup label="${grpLabel[g]}">${groups[g].map(t=>`<option value="${t.key}">${t.key}</option>`).join('')}</optgroup>`;
     }
@@ -5214,11 +5218,15 @@ function renderSB(){
   list.innerHTML=fil.map(v=>{
     const cnt=data.interventions.filter(i=>i.vehicleId===v.id&&new Date(i.date).getFullYear()===curYear).length;
     const unin=isUninstalled(v.id);
+    const frozen=!unin && isFrozen(v.id); // priorité visuelle au statut désinstallé s'il est aussi gelé
+    const inactive=unin||frozen;
     const vNum = v.num ? `<span style="font-family:'DM Mono',monospace;font-size:9px;font-weight:700;color:var(--accent);background:rgba(240,165,0,.12);padding:1px 6px;border-radius:5px;margin-right:5px;">#${v.num}</span>` : '';
-    return `<div class="vi ${v.id===selVid?'active':''} ${unin?'vi-unin':''}" onclick="selV('${v.id}')">
-      <div class="vn" style="${unin?'color:var(--muted)':''}">${vNum}${v.name}${unin?' <span style="font-size:9px;font-weight:700;color:#e74c3c;background:rgba(231,76,60,.12);padding:1px 6px;border-radius:6px;letter-spacing:.5px">DÉSINSTALLÉ</span>':''}</div>
+    const badge = unin ? '<span style="font-size:9px;font-weight:700;color:#e74c3c;background:rgba(231,76,60,.12);padding:1px 6px;border-radius:6px;letter-spacing:.5px">DÉSINSTALLÉ</span>' :
+                  frozen ? '<span style="font-size:9px;font-weight:700;color:#ff9f43;background:rgba(255,159,67,.12);padding:1px 6px;border-radius:6px;letter-spacing:.5px">INDISPONIBLE</span>' : '';
+    return `<div class="vi ${v.id===selVid?'active':''} ${inactive?'vi-unin':''}" onclick="selV('${v.id}')">
+      <div class="vn" style="${inactive?'color:var(--muted)':''}">${vNum}${v.name}${badge?' '+badge:''}</div>
       <div class="vm"><span>${v.plate}</span><span>·</span><span>${v.type}</span></div>
-      ${cnt>0?`<div class="vct" style="${unin?'background:var(--muted)':''}">${cnt}</div>`:''}
+      ${cnt>0?`<div class="vct" style="${inactive?'background:var(--muted)':''}">${cnt}</div>`:''}
     </div>`;
   }).join('');
 }
@@ -5237,6 +5245,25 @@ function isUninstalled(vid){
   if(!relevant.length) return false; // Aucune intervention install/désinstall → actif
   // La dernière intervention détermine le statut
   return desKeys.includes(relevant[0].type);
+}
+
+// ═══════════════ GEL / DÉGEL D'UN VÉHICULE (Indisponible / Disponible) ═══════════════
+// Indépendant de l'installation de la balise — sert à figer un bien (panne, immobilisation...)
+function isFrozen(vid){
+  const cfg=getCfg();
+  const itypes=cfg?.itypes||DEFAULT_ITYPES;
+  const froKeys=itypes.filter(t=>t.group==='indisponible').map(t=>t.key);
+  const unfroKeys=itypes.filter(t=>t.group==='disponible').map(t=>t.key);
+  const relevant = data.interventions
+    .filter(i=>i.vehicleId===vid && (froKeys.includes(i.type)||unfroKeys.includes(i.type)))
+    .sort((a,b)=>new Date(b.date)-new Date(a.date));
+  if(!relevant.length) return false; // Jamais gelé → disponible par défaut
+  return froKeys.includes(relevant[0].type);
+}
+
+// Un véhicule compte comme "inactif" dans les KPIs s'il est désinstallé OU gelé
+function isInactive(vid){
+  return isUninstalled(vid) || isFrozen(vid);
 }
 
 function selV(id){selVid=id;if(curTab!=='flotte')switchTab('flotte');else{renderSB();renderDet(id);}}
@@ -5318,12 +5345,16 @@ function renderDet(id){
   const cost=ii.reduce((s,i)=>s+(i.cost||0),0);
   const tc={};ii.forEach(i=>{tc[i.type]=(tc[i.type]||0)+1;});const mx=Math.max(1,...Object.values(tc));
   const mc=Array(12).fill(0);ii.forEach(i=>{mc[new Date(i.date).getMonth()]++;});const mxm=Math.max(1,...mc);
+  const _unin=isUninstalled(id);
+  const _frozen=!_unin && isFrozen(id);
+  const _inactive=_unin||_frozen;
   document.getElementById('fleetC').innerHTML=`
-    <div class="vh" style="${isUninstalled(id)?'opacity:.7':''}">
+    <div class="vh" style="${_inactive?'opacity:.7':''}">
       <div>
-        <div class="vt" style="${isUninstalled(id)?'color:var(--muted)':''}">
+        <div class="vt" style="${_inactive?'color:var(--muted)':''}">
           ${v.num?`<span style="font-family:'DM Mono',monospace;font-size:14px;font-weight:700;color:var(--accent);background:rgba(240,165,0,.12);padding:2px 9px;border-radius:6px;margin-right:8px;">#${v.num}</span>`:''}${v.name}
-          ${isUninstalled(id)?'<span style="font-size:11px;font-weight:700;color:#e74c3c;background:rgba(231,76,60,.1);padding:2px 9px;border-radius:8px;margin-left:9px;letter-spacing:.5px">DÉSINSTALLÉ</span>':''}
+          ${_unin?'<span style="font-size:11px;font-weight:700;color:#e74c3c;background:rgba(231,76,60,.1);padding:2px 9px;border-radius:8px;margin-left:9px;letter-spacing:.5px">DÉSINSTALLÉ</span>':''}
+          ${_frozen?'<span style="font-size:11px;font-weight:700;color:#ff9f43;background:rgba(255,159,67,.1);padding:2px 9px;border-radius:8px;margin-left:9px;letter-spacing:.5px">INDISPONIBLE</span>':''}
         </div>
         <div class="vs">${v.plate} · ${v.type}</div>
         <div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);margin-top:3px;display:flex;gap:12px;flex-wrap:wrap;">
@@ -5439,7 +5470,7 @@ function renderBT(){
     <div style="font-size:21px;font-weight:800;margin-bottom:3px;">${L.bTit}</div>
     <div style="font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);margin-bottom:20px;">${L.bYr} ${curYear}</div>
     <div class="bkpis">
-      <div class="bk"><div class="bkl">${L.kT}</div><div class="bkv">${yi.length}</div><div class="bks">${(()=>{const tot=data.vehicles.length;const unin=data.vehicles.filter(v=>isUninstalled(v.id)).length;return L.kTV(tot-unin,tot);})()}</div></div>
+      <div class="bk"><div class="bkl">${L.kT}</div><div class="bkv">${yi.length}</div><div class="bks">${(()=>{const tot=data.vehicles.length;const unin=data.vehicles.filter(v=>isInactive(v.id)).length;return L.kTV(tot-unin,tot);})()}</div></div>
       <div class="bk"><div class="bkl">${L.kI}</div><div class="bkv" style="color:#f0a500">${sm(cI)}</div><div class="bks">${L.kSI}</div></div>
       <div class="bk"><div class="bkl">${L.kD}</div><div class="bkv" style="color:#e74c3c">${sm(cD)}</div><div class="bks">${L.kSD}</div></div>
       <div class="bk"><div class="bkl">${L.kP}</div><div class="bkv" style="color:#2ec97b">${sm(cP)}</div><div class="bks">${L.kSP}</div></div>
