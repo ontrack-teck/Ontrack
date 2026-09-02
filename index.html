@@ -804,6 +804,15 @@ tbody td{padding:11px 17px;font-size:12px;}
     </div>
   </div><!-- /rptPaneTech -->
 
+  <!-- Option commune : Bilan & Performance (graphiques d'évolution) -->
+  <div class="fg" style="margin-bottom:14px;background:var(--surface2);border-radius:8px;padding:12px 14px;">
+    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--text);">
+      <input type="checkbox" id="rptChkBilanPerf" onchange="updateRptPreview()" style="accent-color:var(--accent);width:15px;height:15px;">
+      📊 Inclure Bilan &amp; Performance (courbes d'évolution)
+    </label>
+    <div style="font-size:11px;color:var(--muted);margin-top:4px;margin-left:23px;">Ajoute au même fichier une section graphique : activité mensuelle, répartition par type, performance techniciens.</div>
+  </div>
+
   <div id="rptPreview" style="background:var(--surface2);border-radius:8px;padding:10px 14px;font-size:11px;color:var(--muted);margin-bottom:16px;min-height:36px;"></div>
 
   <div class="macts">
@@ -4947,6 +4956,164 @@ function updateRptPreview(){
   }
 }
 
+// ═══════════════ SECTION BILAN & PERFORMANCE POUR RAPPORTS ═══════════════
+// Construit des buckets mensuels (année-mois) couvrant la période, plafonné à 36 mois
+function buildMonthBuckets(dFrom, dTo){
+  const buckets=[];
+  let y=dFrom.getFullYear(), m=dFrom.getMonth();
+  const endY=dTo.getFullYear(), endM=dTo.getMonth();
+  let guard=0;
+  while((y<endY || (y===endY && m<=endM)) && guard<36){
+    buckets.push({y,m,label:new Date(y,m,1).toLocaleDateString('fr-FR',{month:'short',year:'2-digit'})});
+    m++; if(m>11){m=0;y++;}
+    guard++;
+  }
+  return buckets;
+}
+
+// Construit le bloc HTML + script d'initialisation des graphiques Chart.js pour la section
+// Bilan & Performance, réutilisable pour le rapport Flotte et le rapport Technicien.
+// vehiclesForStatus/interventionsForStatus : jeu complet (historique) pour calculer actifs/total
+// periodInterventions : interventions déjà filtrées par période (et éventuellement technicien/véhicule)
+function buildBilanPerfSection(vehiclesForStatus, interventionsForStatus, periodInterventions, dFrom, dTo, canvasPrefix, cfg){
+  const itypes = cfg?.itypes || DEFAULT_ITYPES;
+  const cI = itypes.filter(t=>t.group==='install').map(t=>t.key);
+  const cD = itypes.filter(t=>t.group==='desinstall').map(t=>t.key);
+  const cP = itypes.filter(t=>t.group==='piece').map(t=>t.key);
+  const totalCost = periodInterventions.reduce((s,i)=>s+(i.cost||0),0);
+  const byTypeCount = {}; periodInterventions.forEach(i=>{byTypeCount[i.type]=(byTypeCount[i.type]||0)+1;});
+  const sm = arr => arr.reduce((s,tp)=>s+(byTypeCount[tp]||0),0);
+
+  // Actifs / Total — calculé sur l'historique complet, indépendant de la période choisie
+  const tot = vehiclesForStatus.length;
+  const unin = vehiclesForStatus.filter(v=>isInactive(v.id, interventionsForStatus)).length;
+  const actifs = tot - unin;
+
+  // Buckets mensuels sur la période
+  const buckets = buildMonthBuckets(dFrom, dTo);
+  const monthlyCounts = buckets.map(b => periodInterventions.filter(i=>{const d=new Date(i.date);return d.getFullYear()===b.y && d.getMonth()===b.m;}).length);
+  const monthLabels = buckets.map(b=>b.label);
+
+  // Top 5 véhicules sur la période
+  const vc = {}; periodInterventions.forEach(i=>{vc[i.vehicleId]=(vc[i.vehicleId]||0)+1;});
+  const topV = Object.entries(vc).sort((a,b)=>b[1]-a[1]).slice(0,5).map(([vid,n])=>{
+    const v = vehiclesForStatus.find(x=>x.id===vid);
+    return {name: v?.name||vid, plate: v?.plate||'—', count:n};
+  });
+  const maxTopV = Math.max(1,...topV.map(t=>t.count),1);
+
+  const typeEntries = Object.entries(byTypeCount).sort((a,b)=>b[1]-a[1]);
+
+  // Performance par technicien sur la période
+  const techMap = {};
+  periodInterventions.forEach(i=>{
+    if(!i.tech) return;
+    if(!techMap[i.tech]) techMap[i.tech]={total:0,byMonth:buckets.map(()=>0)};
+    techMap[i.tech].total++;
+    const d=new Date(i.date);
+    const idx = buckets.findIndex(b=>b.y===d.getFullYear() && b.m===d.getMonth());
+    if(idx>=0) techMap[i.tech].byMonth[idx]++;
+  });
+  const techs = Object.entries(techMap).sort((a,b)=>b[1].total-a[1].total);
+  const totalTechInterv = techs.reduce((s,[,v])=>s+v.total,0) || 1;
+  const palette=['#f0a500','#4a9eff','#2ec97b','#ff6b9d','#9b6dff','#00c9b1','#ff9f43','#a29bfe','#e05a2b','#70a1ff'];
+
+  const kpiBox=(label,val,color)=>`<div style="background:#161922;border-radius:10px;padding:14px 18px;border:1px solid #2a2d36;flex:1;min-width:120px;"><div style="font-size:22px;font-weight:800;color:${color};">${val}</div><div style="font-size:10px;color:#6b7280;margin-top:3px;">${label}</div></div>`;
+  const secT=(title,color)=>`<div style="margin:28px 0 12px;border-left:4px solid ${color};padding-left:12px;"><div style="font-size:16px;font-weight:800;color:#fff;">${title}</div></div>`;
+
+  const topVHtml = topV.length ? topV.map((t,i)=>`
+    <div style="display:flex;align-items:center;gap:10px;padding:6px 0;">
+      <div style="width:20px;height:20px;border-radius:50%;background:#2a2d36;color:#f0a500;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;">${i+1}</div>
+      <div style="flex:1;min-width:0;"><div style="font-size:12px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${t.name}</div><div style="font-size:10px;color:#6b7280;">${t.plate}</div></div>
+      <div style="flex:2;background:#2a2d36;border-radius:5px;height:8px;overflow:hidden;"><div style="height:100%;background:#f0a500;width:${(t.count/maxTopV)*100}%;"></div></div>
+      <div style="font-size:12px;font-weight:800;color:#f0a500;min-width:20px;text-align:right;">${t.count}</div>
+    </div>`).join('') : `<div style="color:#6b7280;font-size:12px;padding:10px 0;">Aucune donnée</div>`;
+
+  const techBarsHtml = techs.length ? techs.map(([name,d],i)=>{
+    const col = palette[i%palette.length];
+    const w = Math.round((d.total/techs[0][1].total)*100);
+    const pct = Math.round((d.total/totalTechInterv)*100);
+    return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+      <div style="width:110px;font-size:11px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${name}">${name}</div>
+      <div style="flex:1;background:#2a2d36;border-radius:5px;height:16px;position:relative;overflow:hidden;"><div style="height:100%;background:${col};width:${w}%;display:flex;align-items:center;justify-content:flex-end;padding-right:6px;"><span style="font-size:10px;font-weight:800;color:#000;">${d.total}</span></div></div>
+      <div style="width:36px;font-size:11px;color:#6b7280;text-align:right;">${pct}%</div>
+    </div>`;
+  }).join('') : `<div style="color:#6b7280;font-size:12px;padding:10px 0;">Aucune donnée technicien</div>`;
+
+  const techTableHtml = techs.length ? `<table style="width:100%;border-collapse:collapse;margin-top:10px;">
+    <thead><tr><th style="background:#2a2d36;color:#ff9f43;padding:7px 10px;text-align:left;font-size:10px;text-transform:uppercase;">#</th><th style="background:#2a2d36;color:#ff9f43;padding:7px 10px;text-align:left;font-size:10px;text-transform:uppercase;">Technicien</th><th style="background:#2a2d36;color:#ff9f43;padding:7px 10px;text-align:center;font-size:10px;text-transform:uppercase;">Interv.</th><th style="background:#2a2d36;color:#ff9f43;padding:7px 10px;text-align:center;font-size:10px;text-transform:uppercase;">%</th></tr></thead>
+    <tbody>${techs.map(([name,d],i)=>`<tr style="background:${i%2===1?'#1a1d26':'#161922'};"><td style="padding:6px 10px;font-size:12px;color:#e8eaf0;">${i+1}</td><td style="padding:6px 10px;font-size:12px;color:#e8eaf0;font-weight:700;">${name}</td><td style="padding:6px 10px;font-size:12px;color:#ff9f43;text-align:center;font-weight:800;">${d.total}</td><td style="padding:6px 10px;font-size:12px;color:#6b7280;text-align:center;">${Math.round(d.total/totalTechInterv*100)}%</td></tr>`).join('')}</tbody>
+  </table>` : '';
+
+  const html = `
+    ${secT('📊 Bilan général','#f0a500')}
+    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px;">
+      ${kpiBox('Interventions (période)', periodInterventions.length, '#f0a500')}
+      ${kpiBox('Installations', sm(cI), '#f0a500')}
+      ${kpiBox('Désinstallations', sm(cD), '#e74c3c')}
+      ${kpiBox('Changement pièce', sm(cP), '#2ec97b')}
+      ${kpiBox('Coût total', totalCost.toFixed(2)+' €', '#4a9eff')}
+      ${kpiBox('Actifs / Total', actifs+' / '+tot, '#9775fa')}
+    </div>
+    <div style="display:grid;grid-template-columns:1.4fr 1fr;gap:16px;margin-bottom:16px;">
+      <div style="background:#161922;border:1px solid #2a2d36;border-radius:10px;padding:14px;">
+        <div style="font-size:11px;color:#6b7280;margin-bottom:8px;text-transform:uppercase;letter-spacing:1px;">Activité mensuelle</div>
+        <div style="height:220px;"><canvas id="${canvasPrefix}_monthly"></canvas></div>
+      </div>
+      <div style="background:#161922;border:1px solid #2a2d36;border-radius:10px;padding:14px;">
+        <div style="font-size:11px;color:#6b7280;margin-bottom:8px;text-transform:uppercase;letter-spacing:1px;">Répartition par type</div>
+        <div style="height:220px;"><canvas id="${canvasPrefix}_types"></canvas></div>
+      </div>
+    </div>
+    <div style="background:#161922;border:1px solid #2a2d36;border-radius:10px;padding:14px;margin-bottom:8px;">
+      <div style="font-size:11px;color:#6b7280;margin-bottom:8px;text-transform:uppercase;letter-spacing:1px;">Top véhicules (période)</div>
+      ${topVHtml}
+    </div>
+
+    ${secT('🏆 Performance techniciens','#ff9f43')}
+    <div style="background:#161922;border:1px solid #2a2d36;border-radius:10px;padding:14px;margin-bottom:14px;">
+      ${techBarsHtml}
+    </div>
+    <div style="background:#161922;border:1px solid #2a2d36;border-radius:10px;padding:14px;margin-bottom:8px;">
+      <div style="font-size:11px;color:#6b7280;margin-bottom:8px;text-transform:uppercase;letter-spacing:1px;">Évolution mensuelle par technicien</div>
+      <div style="height:260px;"><canvas id="${canvasPrefix}_techline"></canvas></div>
+    </div>
+    ${techTableHtml}
+  `;
+
+  const chartData = {
+    monthLabels, monthlyCounts,
+    typeLabels: typeEntries.map(([t])=>t), typeCounts: typeEntries.map(([,c])=>c), typeColors: typeEntries.map(([t])=>TC()[t]||'#888'),
+    techDatasets: techs.slice(0,8).map(([name,d],i)=>({label:name, data:d.byMonth, color:palette[i%palette.length]}))
+  };
+
+  const initScript = `(function(){
+    const d = ${JSON.stringify(chartData)};
+    new Chart(document.getElementById('${canvasPrefix}_monthly').getContext('2d'), {
+      type:'bar',
+      data:{labels:d.monthLabels, datasets:[{label:'Interventions', data:d.monthlyCounts, backgroundColor:'#f0a500bb', borderRadius:4}]},
+      options:{responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{x:{grid:{color:'#2a3045'},ticks:{color:'#7a8099',font:{size:10}}}, y:{grid:{color:'#2a3045'},ticks:{color:'#7a8099',font:{size:10},stepSize:1},beginAtZero:true}}}
+    });
+    if(d.typeLabels.length){
+      new Chart(document.getElementById('${canvasPrefix}_types').getContext('2d'), {
+        type:'doughnut',
+        data:{labels:d.typeLabels, datasets:[{data:d.typeCounts, backgroundColor:d.typeColors, borderWidth:2, borderColor:'#161922'}]},
+        options:{responsive:true, maintainAspectRatio:false, plugins:{legend:{position:'right',labels:{color:'#e8eaf0',font:{size:10},boxWidth:10,padding:6}}}, cutout:'58%'}
+      });
+    }
+    if(d.techDatasets.length){
+      new Chart(document.getElementById('${canvasPrefix}_techline').getContext('2d'), {
+        type:'line',
+        data:{labels:d.monthLabels, datasets:d.techDatasets.map(t=>({label:t.label,data:t.data,borderColor:t.color,backgroundColor:t.color+'33',tension:.4,fill:false,pointRadius:3,borderWidth:2}))},
+        options:{responsive:true, maintainAspectRatio:false, plugins:{legend:{labels:{color:'#a0aab8',font:{size:10},boxWidth:10}}}, scales:{x:{grid:{color:'#ffffff0d'},ticks:{color:'#a0aab8',font:{size:10}}}, y:{grid:{color:'#ffffff0d'},ticks:{color:'#a0aab8',font:{size:10},stepSize:1},beginAtZero:true}}}
+      });
+    }
+  })();`;
+
+  return {html, initScript};
+}
+// ══════════════════════════════════════════════════════════════════════
+
 function generateReport(){
   if(rptTab==='tech'){ generateReportTech(); return; }
   const from=document.getElementById('rptFrom').value;
@@ -5056,6 +5223,20 @@ function generateReport(){
     sections_html+=`<table style="width:100%;border-collapse:collapse;margin-bottom:8px;"><thead>${hdr(['Véhicule','Coût (€)','Coût (FCFA)','%'],'#ff6b6b')}</thead><tbody>${cRows}${footRow}</tbody></table>`;
   }
 
+  // ── Section Bilan & Performance (optionnelle) ────────────
+  let bilanPerfHtml='', bilanPerfScript='', chartLibTag='';
+  if(chk('rptChkBilanPerf')){
+    const bp = buildBilanPerfSection(data.vehicles, data.interventions, interventions, dFrom, dTo, 'bp', cfg);
+    bilanPerfHtml = `<div class="page-break"></div>
+      <div style="margin:10px 0 6px;">
+        <div style="font-size:10px;color:#9775fa;letter-spacing:2px;text-transform:uppercase;font-weight:700;">Vue d'ensemble</div>
+        <div style="font-size:20px;font-weight:900;color:#fff;">📊 Bilan &amp; Performance</div>
+      </div>
+      ${bp.html}`;
+    bilanPerfScript = bp.initScript;
+    chartLibTag = '<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"><\/script>';
+  }
+
   // ── Assembler le HTML complet ────────────────────────────
   const html=`<!DOCTYPE html>
 <html lang="fr"><head>
@@ -5105,10 +5286,14 @@ function generateReport(){
   <!-- SECTIONS -->
   ${sections_html}
 
+  ${bilanPerfHtml}
+
   <div style="margin-top:40px;padding-top:16px;border-top:1px solid #2a2d36;font-size:10px;color:#6b7280;text-align:center;">
     TechFleet Gestion de Flotte &nbsp;·&nbsp; Rapport généré le ${fmt(new Date())} &nbsp;·&nbsp; ${currentUser?.email||''}
   </div>
 </div>
+${chartLibTag}
+<script>${bilanPerfScript}<\/script>
 `;
 
   // ── Ouvrir dans un nouvel onglet et déclencher l'impression ──
@@ -5225,6 +5410,27 @@ async function generateReportTech(){
 
   const basesLabel = selBases.map(bid=>baseNames[bid]||bid).join(', ');
 
+  // ── Section Bilan & Performance (optionnelle, agrégée sur toutes les bases sélectionnées) ──
+  let bilanPerfHtml='', bilanPerfScript='', chartLibTag='';
+  if(document.getElementById('rptChkBilanPerf')?.checked){
+    let allVehiclesAgg=[], allInterventionsAgg=[];
+    selBases.forEach(bid=>{
+      const bd=_rptMultiBaseCache[bid];
+      if(!bd) return;
+      allVehiclesAgg.push(...bd.vehicles);
+      allInterventionsAgg.push(...bd.interventions);
+    });
+    const bp = buildBilanPerfSection(allVehiclesAgg, allInterventionsAgg, interventions, dFrom, dTo, 'bp', cfg);
+    bilanPerfHtml = `<div class="page-break"></div>
+      <div style="margin:10px 0 6px;">
+        <div style="font-size:10px;color:#9775fa;letter-spacing:2px;text-transform:uppercase;font-weight:700;">Vue d'ensemble — ${tech}</div>
+        <div style="font-size:20px;font-weight:900;color:#fff;">📊 Bilan &amp; Performance</div>
+      </div>
+      ${bp.html}`;
+    bilanPerfScript = bp.initScript;
+    chartLibTag = '<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"><\/script>';
+  }
+
   // ── HTML complet ────────────────────────────────────────
   const html=`<!DOCTYPE html>
 <html lang="fr"><head>
@@ -5237,6 +5443,7 @@ async function generateReportTech(){
     *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;color-adjust:exact!important;}
     body{background:#0d0f14!important;color:#e8eaf0!important;}
     .no-print{display:none!important;}
+    .page-break{page-break-before:always;}
     tr{page-break-inside:avoid;}
   }
 </style>
@@ -5310,10 +5517,14 @@ async function generateReportTech(){
     <tbody>${simRows}</tbody>
   </table>`:''}
 
+  ${bilanPerfHtml}
+
   <div style="margin-top:40px;padding-top:16px;border-top:1px solid #2a2d36;font-size:10px;color:#6b7280;text-align:center;">
     TechFleet Gestion de Flotte &nbsp;·&nbsp; Rapport Technicien consolidé : ${tech} &nbsp;·&nbsp; ${selBases.length} base(s) &nbsp;·&nbsp; Généré le ${fmt(new Date())} &nbsp;·&nbsp; ${currentUser?.email||''}
   </div>
 </div>
+${chartLibTag}
+<script>${bilanPerfScript}<\/script>
 </body></html>`;
 
   const win=window.open('','_blank');
@@ -5348,15 +5559,17 @@ function renderSB(){
   }).join('');
 }
 
-function isUninstalled(vid){
+function isUninstalled(vid, interventionsList){
   // Logique chronologique : regarder la DERNIÈRE intervention install/désinstall
   // Si la dernière est une désinstallation → désinstallé
   // Si la dernière est une installation (réinstallation) → actif
+  // interventionsList optionnel : permet de calculer le statut sur un jeu de données externe (ex: autre base)
+  const list = interventionsList || data.interventions;
   const cfg=getCfg();
   const desKeys=(cfg?.itypes||DEFAULT_ITYPES).filter(t=>t.group==='desinstall').map(t=>t.key);
   const instKeys=(cfg?.itypes||DEFAULT_ITYPES).filter(t=>t.group==='install').map(t=>t.key);
   // Filtrer toutes les interventions install/désinstall de ce véhicule
-  const relevant = data.interventions
+  const relevant = list
     .filter(i=>i.vehicleId===vid && (desKeys.includes(i.type)||instKeys.includes(i.type)))
     .sort((a,b)=>new Date(b.date)-new Date(a.date)); // Trier du plus récent au plus ancien
   if(!relevant.length) return false; // Aucune intervention install/désinstall → actif
@@ -5366,12 +5579,13 @@ function isUninstalled(vid){
 
 // ═══════════════ GEL / DÉGEL D'UN VÉHICULE (Indisponible / Disponible) ═══════════════
 // Indépendant de l'installation de la balise — sert à figer un bien (panne, immobilisation...)
-function isFrozen(vid){
+function isFrozen(vid, interventionsList){
+  const list = interventionsList || data.interventions;
   const cfg=getCfg();
   const itypes=cfg?.itypes||DEFAULT_ITYPES;
   const froKeys=itypes.filter(t=>t.group==='indisponible').map(t=>t.key);
   const unfroKeys=itypes.filter(t=>t.group==='disponible').map(t=>t.key);
-  const relevant = data.interventions
+  const relevant = list
     .filter(i=>i.vehicleId===vid && (froKeys.includes(i.type)||unfroKeys.includes(i.type)))
     .sort((a,b)=>new Date(b.date)-new Date(a.date));
   if(!relevant.length) return false; // Jamais gelé → disponible par défaut
@@ -5379,8 +5593,8 @@ function isFrozen(vid){
 }
 
 // Un véhicule compte comme "inactif" dans les KPIs s'il est désinstallé OU gelé
-function isInactive(vid){
-  return isUninstalled(vid) || isFrozen(vid);
+function isInactive(vid, interventionsList){
+  return isUninstalled(vid, interventionsList) || isFrozen(vid, interventionsList);
 }
 
 function selV(id){selVid=id;if(curTab!=='flotte')switchTab('flotte');else{renderSB();renderDet(id);}}
