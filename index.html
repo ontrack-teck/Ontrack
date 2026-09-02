@@ -5261,6 +5261,9 @@ function generateReport(){
     const bp = buildBilanPerfSection(data.vehicles, data.interventions, interventions, dFrom, dTo, 'bp', cfg);
     const standaloneTitle = `TechFleet — Bilan & Performance (${from} → ${to})`;
     const standaloneDoc = buildStandaloneBilanPerfDoc(standaloneTitle, bp.html, bp.initScript, currentBase);
+    // Échapper les "</script" internes au document standalone pour ne pas fermer prématurément
+    // le <script> englobant du rapport principal quand cette chaîne y est injectée
+    const safeStandaloneJson = JSON.stringify(standaloneDoc).replace(/<\/script/gi, '<\\/script');
     bilanPerfHtml = `<div id="bilanPerfWrap">
       <div class="no-print" style="background:#161922;border:1px dashed #9775fa;border-radius:10px;padding:16px 20px;margin:24px 0;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;">
         <div>
@@ -5275,7 +5278,7 @@ function generateReport(){
       </div>
       ${bp.html}
     </div>`;
-    bilanPerfScript = `const _bilanPerfStandalone = ${JSON.stringify(standaloneDoc)};
+    bilanPerfScript = `const _bilanPerfStandalone = ${safeStandaloneJson};
 function downloadBilanPerfHtml(){
   const blob = new Blob([_bilanPerfStandalone], {type:'text/html'});
   const url = URL.createObjectURL(blob);
@@ -5475,6 +5478,9 @@ async function generateReportTech(){
     const bp = buildBilanPerfSection(allVehiclesAgg, allInterventionsAgg, interventions, dFrom, dTo, 'bp', cfg);
     const standaloneTitle = `TechFleet — Bilan & Performance — ${tech} (${from} → ${to})`;
     const standaloneDoc = buildStandaloneBilanPerfDoc(standaloneTitle, bp.html, bp.initScript, basesLabel);
+    // Échapper les "</script" internes au document standalone pour ne pas fermer prématurément
+    // le <script> englobant du rapport principal quand cette chaîne y est injectée
+    const safeStandaloneJson = JSON.stringify(standaloneDoc).replace(/<\/script/gi, '<\\/script');
     bilanPerfHtml = `<div id="bilanPerfWrap">
       <div class="no-print" style="background:#161922;border:1px dashed #9775fa;border-radius:10px;padding:16px 20px;margin:24px 0;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;">
         <div>
@@ -5489,7 +5495,7 @@ async function generateReportTech(){
       </div>
       ${bp.html}
     </div>`;
-    bilanPerfScript = `const _bilanPerfStandalone = ${JSON.stringify(standaloneDoc)};
+    bilanPerfScript = `const _bilanPerfStandalone = ${safeStandaloneJson};
 function downloadBilanPerfHtml(){
   const blob = new Blob([_bilanPerfStandalone], {type:'text/html'});
   const url = URL.createObjectURL(blob);
