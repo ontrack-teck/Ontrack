@@ -783,13 +783,24 @@ tbody td{padding:11px 17px;font-size:12px;}
       <select id="rptTech" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-family:inherit;font-size:13px;outline:none;" onchange="updateRptPreview()">
         <option value="">— Sélectionnez un technicien —</option>
       </select>
+      <div id="rptTechLoading" style="font-size:11px;color:var(--muted);margin-top:4px;display:none;">⏳ Chargement des techniciens sur toutes les bases…</div>
+    </div>
+    <div class="fg" style="margin-bottom:14px;">
+      <label style="margin-bottom:8px;display:block;">Bases à inclure <span style="color:var(--red)">*</span></label>
+      <div id="rptBasesList" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;max-height:160px;overflow-y:auto;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px;">
+        <div style="color:var(--muted);font-size:12px;">Chargement des bases…</div>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:6px;">
+        <button type="button" onclick="toggleAllRptBases(true)" style="background:none;border:none;color:var(--blue);font-size:11px;cursor:pointer;text-decoration:underline;">Tout sélectionner</button>
+        <button type="button" onclick="toggleAllRptBases(false)" style="background:none;border:none;color:var(--muted);font-size:11px;cursor:pointer;text-decoration:underline;">Tout désélectionner</button>
+      </div>
     </div>
     <div style="background:var(--surface2);border-radius:8px;padding:10px 14px;font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.7;">
-      Le rapport technicien inclura :<br>
-      <span style="color:var(--text)">✔ Toutes ses interventions sur la période</span><br>
+      Le rapport technicien consolidé inclura :<br>
+      <span style="color:var(--text)">✔ Toutes ses interventions sur la période, toutes bases confondues</span><br>
       <span style="color:var(--text)">✔ Ses changements SIM effectués</span><br>
-      <span style="color:var(--text)">✔ Sa performance par type d'intervention</span><br>
-      <span style="color:var(--text)">✔ Les véhicules sur lesquels il a travaillé</span>
+      <span style="color:var(--text)">✔ Sa performance par type d'intervention et par base</span><br>
+      <span style="color:var(--text)">✔ Les véhicules sur lesquels il a travaillé (avec la base d'origine)</span>
     </div>
   </div><!-- /rptPaneTech -->
 
@@ -4812,6 +4823,8 @@ function openReportModal(){
   const tSel = document.getElementById('rptTech');
   tSel.innerHTML = '<option value="">— Sélectionnez un technicien —</option>';
   techs.forEach(t => { const o=document.createElement('option'); o.value=t; o.textContent=t; tSel.appendChild(o); });
+  // Réinitialiser le cache multi-bases pour des données fraîches à chaque ouverture
+  _rptMultiBaseCache = null;
   // Réinitialiser sur onglet Flotte
   switchRptTab('flotte');
   updateRptPreview();
@@ -4829,6 +4842,7 @@ function openReportModal(){
 
 // ─── ONGLETS RAPPORT ──────────────────────────────────
 let rptTab = 'flotte';
+let _rptMultiBaseCache = null; // { baseId: {vehicles, interventions} }
 
 function switchRptTab(tab){
   rptTab = tab;
@@ -4840,7 +4854,64 @@ function switchRptTab(tab){
   const btnT = document.getElementById('rptTabTech');
   if(btnF){ btnF.style.background = isFlotte ? 'var(--accent)' : 'transparent'; btnF.style.color = isFlotte ? '#000' : 'var(--muted)'; }
   if(btnT){ btnT.style.background = !isFlotte ? 'var(--accent)' : 'transparent'; btnT.style.color = !isFlotte ? '#000' : 'var(--muted)'; }
+  if(tab==='tech' && !_rptMultiBaseCache){ loadRptMultiBaseData(); }
   updateRptPreview();
+}
+
+// Charge les véhicules+interventions de TOUTES les bases de la plateforme, une seule fois
+async function loadRptMultiBaseData(){
+  const loadingEl = document.getElementById('rptTechLoading');
+  const basesListEl = document.getElementById('rptBasesList');
+  if(loadingEl) loadingEl.style.display = '';
+  const bases = getBases();
+  const result = {};
+  await Promise.all(bases.map(async b => {
+    if(b.id === currentBase){
+      // Base courante : déjà en mémoire, pas besoin de re-fetch
+      result[b.id] = { vehicles: data.vehicles, interventions: data.interventions, name: b.name };
+      return;
+    }
+    const fb = await FB.get(b.id + '__fleet').catch(()=>null);
+    result[b.id] = {
+      vehicles: FB._normalize(fb?.vehicles || []),
+      interventions: FB._normalize(fb?.interventions || []),
+      name: b.name
+    };
+  }));
+  _rptMultiBaseCache = result;
+  if(loadingEl) loadingEl.style.display = 'none';
+
+  // Peupler les checkboxes des bases (courante cochée par défaut)
+  if(basesListEl){
+    basesListEl.innerHTML = bases.map(b => `
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:var(--text);">
+        <input type="checkbox" class="rptBaseChk" value="${b.id}" ${b.id===currentBase?'checked':''} onchange="updateRptPreview()" style="accent-color:var(--accent);width:14px;height:14px;">
+        ${b.name}
+      </label>`).join('');
+  }
+
+  // Peupler le select technicien avec l'union des techniciens de TOUTES les bases
+  const allTechs = new Set();
+  Object.values(result).forEach(baseData => {
+    baseData.interventions.filter(i=>i.tech).forEach(i=>allTechs.add(i.tech));
+  });
+  const tSel = document.getElementById('rptTech');
+  if(tSel){
+    const currentVal = tSel.value;
+    tSel.innerHTML = '<option value="">— Sélectionnez un technicien —</option>';
+    [...allTechs].sort().forEach(t => { const o=document.createElement('option'); o.value=t; o.textContent=t; tSel.appendChild(o); });
+    if(currentVal && allTechs.has(currentVal)) tSel.value = currentVal;
+  }
+  updateRptPreview();
+}
+
+function toggleAllRptBases(checked){
+  document.querySelectorAll('.rptBaseChk').forEach(cb => cb.checked = checked);
+  updateRptPreview();
+}
+
+function getSelectedRptBases(){
+  return Array.from(document.querySelectorAll('.rptBaseChk:checked')).map(cb => cb.value);
 }
 
 function updateRptPreview(){
@@ -4853,10 +4924,19 @@ function updateRptPreview(){
   if(rptTab==='tech'){
     const tech=document.getElementById('rptTech').value;
     if(!tech){if(el)el.innerHTML='<span style="color:var(--muted)">Sélectionnez un technicien.</span>';return;}
-    const intrvs=data.interventions.filter(i=>{const d=new Date(i.date);return d>=dFrom&&d<=dTo&&i.tech===tech;});
+    const selBases = getSelectedRptBases();
+    if(!selBases.length){if(el)el.innerHTML='<span style="color:var(--red)">⚠️ Sélectionnez au moins une base.</span>';return;}
+    if(!_rptMultiBaseCache){if(el)el.innerHTML='<span style="color:var(--muted)">⏳ Chargement des bases…</span>';return;}
+    let intrvs=[];
+    selBases.forEach(bid => {
+      const baseData = _rptMultiBaseCache[bid];
+      if(!baseData) return;
+      const filtered = baseData.interventions.filter(i=>{const d=new Date(i.date);return d>=dFrom&&d<=dTo&&i.tech===tech;});
+      intrvs.push(...filtered);
+    });
     const sims=intrvs.filter(i=>i.simOld&&i.simNew);
     const cost=intrvs.reduce((s,i)=>s+(i.cost||0),0);
-    if(el) el.innerHTML=`👷 <b style="color:var(--accent)">${tech}</b> &nbsp;·&nbsp; <b style="color:#4a9eff">${intrvs.length}</b> interv. &nbsp;·&nbsp; <b style="color:#2ec97b">${sims.length}</b> SIM &nbsp;·&nbsp; <b style="color:#ff9f43">${cost.toFixed(2)} €</b>`;
+    if(el) el.innerHTML=`👷 <b style="color:var(--accent)">${tech}</b> &nbsp;·&nbsp; <b style="color:#4a9eff">${intrvs.length}</b> interv. &nbsp;·&nbsp; <b style="color:#2ec97b">${sims.length}</b> SIM &nbsp;·&nbsp; <b style="color:#ff9f43">${cost.toFixed(2)} €</b> &nbsp;·&nbsp; <b style="color:var(--muted)">${selBases.length} base(s)</b>`;
   } else {
     const vid=document.getElementById('rptVehicle').value;
     const intrvs=data.interventions.filter(i=>{const d=new Date(i.date);return d>=dFrom&&d<=dTo&&(vid==='all'||i.vehicleId===vid);});
@@ -5043,77 +5123,107 @@ function generateReport(){
 // ════════════════════════════════════════════════════════
 // RAPPORT TECHNICIEN
 // ════════════════════════════════════════════════════════
-function generateReportTech(){
+async function generateReportTech(){
   const from=document.getElementById('rptFrom').value;
   const to=document.getElementById('rptTo').value;
   const tech=document.getElementById('rptTech').value;
   if(!from||!to){alert('Sélectionnez une période.');return;}
   if(!tech){alert('Sélectionnez un technicien.');return;}
+  const selBases = getSelectedRptBases();
+  if(!selBases.length){alert('Sélectionnez au moins une base.');return;}
   const dFrom=new Date(from), dTo=new Date(to+'T23:59:59');
   if(dTo<dFrom){alert('La date de fin doit être après la date de début.');return;}
+  if(!_rptMultiBaseCache){alert('Les données des bases sont en cours de chargement, réessayez dans un instant.');return;}
 
   const cfg=getCfg();
-  const rate=cfg?.rate||655.957;
   const fmt=d=>d?new Date(d).toLocaleDateString('fr-FR'):'—';
   const fmtC=v=>v?(+v).toFixed(2)+' €':'0.00 €';
 
-  // Filtrer les interventions du technicien sur la période
-  const interventions=data.interventions.filter(i=>{
-    const d=new Date(i.date);
-    return d>=dFrom&&d<=dTo&&i.tech===tech;
-  }).sort((a,b)=>new Date(a.date)-new Date(b.date));
+  // ── Agréger les interventions de TOUTES les bases sélectionnées ──
+  let interventions=[];
+  const baseNames={};
+  selBases.forEach(bid=>{
+    const baseData=_rptMultiBaseCache[bid];
+    if(!baseData) return;
+    baseNames[bid]=baseData.name||bid;
+    const filtered = baseData.interventions.filter(i=>{
+      const d=new Date(i.date);
+      return d>=dFrom&&d<=dTo&&i.tech===tech;
+    }).map(i=>({...i, _baseId:bid, _baseName:baseData.name||bid, _vehicles:baseData.vehicles}));
+    interventions.push(...filtered);
+  });
+  interventions.sort((a,b)=>new Date(a.date)-new Date(b.date));
+
+  const getVName=(i)=>{ const v=(i._vehicles||[]).find(x=>x.id===i.vehicleId); return v?.name||i.vehicleId; };
+  const getVPlate=(i)=>{ const v=(i._vehicles||[]).find(x=>x.id===i.vehicleId); return v?.plate||'—'; };
+  const getVType=(i)=>{ const v=(i._vehicles||[]).find(x=>x.id===i.vehicleId); return v?.type||'—'; };
 
   const totalI=interventions.length;
   const totalCost=interventions.reduce((s,i)=>s+(i.cost||0),0);
   const totalSIM=interventions.filter(i=>i.simOld&&i.simNew).length;
-  const vehiclesSet=new Set(interventions.map(i=>i.vehicleId));
+  const vehicleKeys=new Set(interventions.map(i=>i._baseId+'::'+i.vehicleId)); // unicité par base+véhicule
 
   // Répartition par type
   const byType={};
   interventions.forEach(i=>{byType[i.type]=(byType[i.type]||0)+1;});
+
+  // Répartition par base
+  const byBase={};
+  interventions.forEach(i=>{byBase[i._baseId]=(byBase[i._baseId]||0)+1;});
+
+  const baseColor = (bid) => { const b=(getBases()||[]).find(x=>x.id===bid); return b?.color||'#4a9eff'; };
+  const baseChip = (bid) => `<span style="background:${baseColor(bid)}22;color:${baseColor(bid)};border-radius:5px;padding:2px 7px;font-size:10px;font-weight:700;">${baseNames[bid]||bid}</span>`;
 
   // Helpers HTML
   const cell=(v,s='')=>`<td style="padding:7px 11px;font-size:12px;color:#e8eaf0;${s}">${v??'—'}</td>`;
   const hdr=(cols,color='#f0a500')=>`<tr>${cols.map(h=>`<th style="background:#2a2d36;color:${color};padding:8px 11px;text-align:left;font-size:10px;letter-spacing:1px;text-transform:uppercase;border-bottom:2px solid ${color};">${h}</th>`).join('')}</tr>`;
   const row=(cells,alt=false)=>`<tr style="background:${alt?'#1a1d26':'#161922'};">${cells.map(([v,s])=>cell(v,s||'')).join('')}</tr>`;
 
-  // Section titre
   const secT=(title,color='#f0a500')=>`
     <div style="margin:26px 0 10px;border-left:4px solid ${color};padding-left:12px;">
       <div style="font-size:15px;font-weight:800;color:#fff;">${title}</div>
     </div>`;
 
-  // KPI box
   const kpi=(label,val,color='#f0a500')=>`
     <div style="background:#161922;border-radius:10px;padding:14px 16px;border:1px solid #2a2d36;flex:1;min-width:110px;text-align:center;">
       <div style="font-size:22px;font-weight:900;color:${color};">${val}</div>
       <div style="font-size:10px;color:#6b7280;margin-top:4px;">${label}</div>
     </div>`;
 
-  // ─ Tableau interventions
+  // ─ Tableau interventions (avec colonne Base)
   const iRows=interventions.map((i,idx)=>
-    row([[fmt(i.date),'font-family:monospace'],[getVehicleName(i.vehicleId),'font-weight:700'],[`<span style="background:${(TC()[i.type]||'#888')}22;color:${TC()[i.type]||'#888'};border-radius:5px;padding:2px 7px;font-size:11px;">${i.type}</span>`,''],[i.desc||'—','color:#6b7280'],[i.cost?i.cost.toFixed(2)+' €':'—','text-align:right;color:#2ec97b;font-family:monospace'],[i.addedBy||'—','color:#6b7280;font-size:11px']],idx%2===1)
+    row([[fmt(i.date),'font-family:monospace'],[baseChip(i._baseId),''],[getVName(i),'font-weight:700'],[`<span style="background:${(TC()[i.type]||'#888')}22;color:${TC()[i.type]||'#888'};border-radius:5px;padding:2px 7px;font-size:11px;">${i.type}</span>`,''],[i.desc||'—','color:#6b7280'],[i.cost?i.cost.toFixed(2)+' €':'—','text-align:right;color:#2ec97b;font-family:monospace']],idx%2===1)
   ).join('');
 
-  // ─ Tableau répartition par type
+  // ─ Répartition par type
   const typeRows=Object.entries(byType).sort((a,b)=>b[1]-a[1]).map(([t,n],i)=>{
     const cost=interventions.filter(x=>x.type===t).reduce((s,x)=>s+(x.cost||0),0);
     const bar=Math.round(n/totalI*100);
     return row([[`<span style="background:${(TC()[t]||'#888')}22;color:${TC()[t]||'#888'};border-radius:5px;padding:2px 7px;font-size:11px;">${t}</span>`,''],[n,'text-align:center;font-weight:800;color:#f0a500'],[`${bar}%`,'text-align:center;color:#6b7280'],[fmtC(cost),'text-align:right;color:#2ec97b;font-family:monospace']],i%2===1);
   }).join('');
 
-  // ─ Tableau véhicules travaillés
-  const vehRows=[...vehiclesSet].map((vid,i)=>{
-    const vi=interventions.filter(x=>x.vehicleId===vid);
-    const vc=vi.reduce((s,x)=>s+(x.cost||0),0);
-    const v=data.vehicles.find(x=>x.id===vid);
-    return row([[v?.name||vid,'font-weight:700'],[v?.plate||'—'],[v?.type||'—'],[vi.length,'text-align:center;font-weight:800;color:#4a9eff'],[fmtC(vc),'text-align:right;color:#2ec97b;font-family:monospace']],i%2===1);
+  // ─ Répartition par base
+  const baseRows=Object.entries(byBase).sort((a,b)=>b[1]-a[1]).map(([bid,n],i)=>{
+    const cost=interventions.filter(x=>x._baseId===bid).reduce((s,x)=>s+(x.cost||0),0);
+    const bar=Math.round(n/totalI*100);
+    return row([[baseChip(bid),''],[n,'text-align:center;font-weight:800;color:#4a9eff'],[`${bar}%`,'text-align:center;color:#6b7280'],[fmtC(cost),'text-align:right;color:#2ec97b;font-family:monospace']],i%2===1);
   }).join('');
 
-  // ─ Tableau SIM
+  // ─ Véhicules travaillés (avec base d'origine)
+  const vehRows=[...vehicleKeys].map((key,i)=>{
+    const [bid,vid]=key.split('::');
+    const vi=interventions.filter(x=>x._baseId===bid && x.vehicleId===vid);
+    const vc=vi.reduce((s,x)=>s+(x.cost||0),0);
+    const ref=vi[0];
+    return row([[baseChip(bid),''],[getVName(ref),'font-weight:700'],[getVPlate(ref),''],[getVType(ref),''],[vi.length,'text-align:center;font-weight:800;color:#4a9eff'],[fmtC(vc),'text-align:right;color:#2ec97b;font-family:monospace']],i%2===1);
+  }).join('');
+
+  // ─ Changements SIM (avec base)
   const simRows=interventions.filter(i=>i.simOld&&i.simNew).map((i,idx)=>
-    row([[fmt(i.date),'font-family:monospace'],[getVehicleName(i.vehicleId),'font-weight:700'],[i.type],[ `<span style="color:#ff6b6b;font-family:monospace">🔴 ${i.simOld}</span>`,''],[ `<span style="color:#2ec97b;font-family:monospace">🟢 ${i.simNew}</span>`,'']],idx%2===1)
+    row([[fmt(i.date),'font-family:monospace'],[baseChip(i._baseId),''],[getVName(i),'font-weight:700'],[i.type],[ `<span style="color:#ff6b6b;font-family:monospace">🔴 ${i.simOld}</span>`,''],[ `<span style="color:#2ec97b;font-family:monospace">🟢 ${i.simNew}</span>`,'']],idx%2===1)
   ).join('');
+
+  const basesLabel = selBases.map(bid=>baseNames[bid]||bid).join(', ');
 
   // ── HTML complet ────────────────────────────────────────
   const html=`<!DOCTYPE html>
@@ -5138,10 +5248,10 @@ function generateReportTech(){
     <div>
       <div style="font-size:28px;font-weight:900;color:#f0a500;letter-spacing:-1px;">TechFleet</div>
       <div style="font-size:10px;color:#6b7280;letter-spacing:3px;text-transform:uppercase;margin-bottom:10px;">Gestion de Flotte</div>
-      <div style="font-size:11px;color:#f0a500;letter-spacing:2px;text-transform:uppercase;font-weight:700;margin-bottom:4px;">Rapport Technicien</div>
+      <div style="font-size:11px;color:#f0a500;letter-spacing:2px;text-transform:uppercase;font-weight:700;margin-bottom:4px;">Rapport Technicien Consolidé</div>
       <div style="font-size:26px;font-weight:900;color:#fff;margin-bottom:8px;">👷 ${tech}</div>
       <div style="font-size:12px;color:#6b7280;">Période : <b style="color:#e8eaf0">${fmt(from)}</b> → <b style="color:#e8eaf0">${fmt(to)}</b></div>
-      <div style="font-size:12px;color:#6b7280;margin-top:2px;">Base : <b style="color:#f0a500">${currentBase}</b></div>
+      <div style="font-size:12px;color:#6b7280;margin-top:2px;">Bases incluses : <b style="color:#f0a500">${basesLabel}</b></div>
     </div>
     <div style="text-align:right;font-size:11px;color:#6b7280;padding-top:8px;">
       <div>Généré par : ${currentUser?.email||''}</div>
@@ -5160,9 +5270,16 @@ function generateReportTech(){
     ${kpi('Interventions réalisées',totalI,'#f0a500')}
     ${kpi('Coût total généré',fmtC(totalCost),'#2ec97b')}
     ${kpi('Changements SIM',totalSIM,'#4a9eff')}
-    ${kpi('Véhicules traités',vehiclesSet.size,'#ff9f43')}
-    ${kpi('Types distincts',Object.keys(byType).length,'#9775fa')}
+    ${kpi('Véhicules traités',vehicleKeys.size,'#ff9f43')}
+    ${kpi('Bases incluses',selBases.length,'#9775fa')}
   </div>
+
+  <!-- RÉPARTITION PAR BASE -->
+  ${secT('Répartition par base','#4a9eff')}
+  ${baseRows?`<table style="width:100%;border-collapse:collapse;margin-bottom:8px;">
+    <thead>${hdr(['Base','Nb','%','Coût total'],'#4a9eff')}</thead>
+    <tbody>${baseRows}</tbody>
+  </table>`:'<p style="color:#6b7280;padding:10px 0;">Aucune donnée</p>'}
 
   <!-- RÉPARTITION PAR TYPE -->
   ${secT('Répartition par type d\'intervention')}
@@ -5172,16 +5289,16 @@ function generateReportTech(){
   </table>`:'<p style="color:#6b7280;padding:10px 0;">Aucune donnée</p>'}
 
   <!-- VÉHICULES -->
-  ${secT('Véhicules traités','#4a9eff')}
+  ${secT('Véhicules traités (toutes bases)','#4a9eff')}
   ${vehRows?`<table style="width:100%;border-collapse:collapse;margin-bottom:8px;">
-    <thead>${hdr(['Véhicule','Plaque','Type','Interventions','Coût'],'#4a9eff')}</thead>
+    <thead>${hdr(['Base','Véhicule','Plaque','Type','Interventions','Coût'],'#4a9eff')}</thead>
     <tbody>${vehRows}</tbody>
   </table>`:'<p style="color:#6b7280;padding:10px 0;">Aucun véhicule</p>'}
 
   <!-- TOUTES LES INTERVENTIONS -->
   ${secT('Détail de toutes les interventions')}
   ${iRows?`<table style="width:100%;border-collapse:collapse;margin-bottom:8px;font-size:11px;">
-    <thead>${hdr(['Date','Véhicule','Type','Description','Coût','Saisi par'])}</thead>
+    <thead>${hdr(['Date','Base','Véhicule','Type','Description','Coût'])}</thead>
     <tbody>${iRows}</tbody>
   </table>`:'<p style="color:#6b7280;padding:10px 0;">Aucune intervention sur cette période</p>'}
 
@@ -5189,12 +5306,12 @@ function generateReportTech(){
   ${totalSIM>0?`
   ${secT('Changements SIM effectués','#2ec97b')}
   <table style="width:100%;border-collapse:collapse;margin-bottom:8px;">
-    <thead>${hdr(['Date','Véhicule','Type','Ancien SIM','Nouveau SIM'],'#2ec97b')}</thead>
+    <thead>${hdr(['Date','Base','Véhicule','Type','Ancien SIM','Nouveau SIM'],'#2ec97b')}</thead>
     <tbody>${simRows}</tbody>
   </table>`:''}
 
   <div style="margin-top:40px;padding-top:16px;border-top:1px solid #2a2d36;font-size:10px;color:#6b7280;text-align:center;">
-    TechFleet Gestion de Flotte &nbsp;·&nbsp; Rapport Technicien : ${tech} &nbsp;·&nbsp; Généré le ${fmt(new Date())} &nbsp;·&nbsp; ${currentUser?.email||''}
+    TechFleet Gestion de Flotte &nbsp;·&nbsp; Rapport Technicien consolidé : ${tech} &nbsp;·&nbsp; ${selBases.length} base(s) &nbsp;·&nbsp; Généré le ${fmt(new Date())} &nbsp;·&nbsp; ${currentUser?.email||''}
   </div>
 </div>
 </body></html>`;
