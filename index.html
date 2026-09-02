@@ -5112,6 +5112,38 @@ function buildBilanPerfSection(vehiclesForStatus, interventionsForStatus, period
 
   return {html, initScript};
 }
+// Construit un document HTML autonome (téléchargeable séparément) pour la section Bilan & Performance
+function buildStandaloneBilanPerfDoc(title, bpHtmlBlock, bpInitScript, basesLabel){
+  return `<!DOCTYPE html>
+<html lang="fr"><head>
+<meta charset="UTF-8">
+<title>${title}</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:'Segoe UI',Arial,sans-serif;background:#0d0f14;color:#e8eaf0;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  @media print{
+    *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;color-adjust:exact!important;}
+    body{background:#0d0f14!important;color:#e8eaf0!important;}
+    .no-print{display:none!important;}
+  }
+</style>
+</head><body>
+<div style="max-width:900px;margin:0 auto;padding:30px 24px;">
+  <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:20px;">
+    <div>
+      <div style="font-size:28px;font-weight:900;color:#f0a500;letter-spacing:-1px;">TechFleet</div>
+      <div style="font-size:10px;color:#6b7280;letter-spacing:3px;text-transform:uppercase;margin-bottom:8px;">Gestion de Flotte</div>
+      <div style="font-size:11px;color:#9775fa;letter-spacing:2px;text-transform:uppercase;font-weight:700;">📊 Bilan &amp; Performance</div>
+      ${basesLabel?`<div style="font-size:12px;color:#6b7280;margin-top:4px;">Bases : <b style="color:#f0a500">${basesLabel}</b></div>`:''}
+    </div>
+    <button class="no-print" onclick="window.print()" style="background:#f0a500;color:#000;border:none;border-radius:8px;padding:9px 20px;font-weight:700;cursor:pointer;font-size:12px;">🖨️ Imprimer / PDF</button>
+  </div>
+  ${bpHtmlBlock}
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"><\/script>
+<script>${bpInitScript}<\/script>
+</body></html>`;
+}
 // ══════════════════════════════════════════════════════════════════════
 
 function generateReport(){
@@ -5223,17 +5255,36 @@ function generateReport(){
     sections_html+=`<table style="width:100%;border-collapse:collapse;margin-bottom:8px;"><thead>${hdr(['Véhicule','Coût (€)','Coût (FCFA)','%'],'#ff6b6b')}</thead><tbody>${cRows}${footRow}</tbody></table>`;
   }
 
-  // ── Section Bilan & Performance (optionnelle) ────────────
+  // ── Section Bilan & Performance (optionnelle) — fichier HTML séparé, exclu du PDF ──
   let bilanPerfHtml='', bilanPerfScript='', chartLibTag='';
   if(chk('rptChkBilanPerf')){
     const bp = buildBilanPerfSection(data.vehicles, data.interventions, interventions, dFrom, dTo, 'bp', cfg);
-    bilanPerfHtml = `<div class="page-break"></div>
+    const standaloneTitle = `TechFleet — Bilan & Performance (${from} → ${to})`;
+    const standaloneDoc = buildStandaloneBilanPerfDoc(standaloneTitle, bp.html, bp.initScript, currentBase);
+    bilanPerfHtml = `<div id="bilanPerfWrap">
+      <div class="no-print" style="background:#161922;border:1px dashed #9775fa;border-radius:10px;padding:16px 20px;margin:24px 0;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;">
+        <div>
+          <div style="font-size:13px;font-weight:800;color:#9775fa;">📊 Bilan &amp; Performance disponible</div>
+          <div style="font-size:11px;color:#6b7280;margin-top:2px;">Cette section n'est pas incluse dans le PDF imprimé ci-dessus. Téléchargez-la séparément en HTML.</div>
+        </div>
+        <button onclick="downloadBilanPerfHtml()" style="background:#9775fa;color:#000;border:none;border-radius:8px;padding:9px 18px;font-weight:700;cursor:pointer;font-size:12px;white-space:nowrap;">💾 Télécharger (HTML)</button>
+      </div>
       <div style="margin:10px 0 6px;">
-        <div style="font-size:10px;color:#9775fa;letter-spacing:2px;text-transform:uppercase;font-weight:700;">Vue d'ensemble</div>
+        <div style="font-size:10px;color:#9775fa;letter-spacing:2px;text-transform:uppercase;font-weight:700;">Vue d'ensemble (aperçu — non inclus au PDF)</div>
         <div style="font-size:20px;font-weight:900;color:#fff;">📊 Bilan &amp; Performance</div>
       </div>
-      ${bp.html}`;
-    bilanPerfScript = bp.initScript;
+      ${bp.html}
+    </div>`;
+    bilanPerfScript = `const _bilanPerfStandalone = ${JSON.stringify(standaloneDoc)};
+function downloadBilanPerfHtml(){
+  const blob = new Blob([_bilanPerfStandalone], {type:'text/html'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'TechFleet_Bilan_Performance_${from}_${to}.html';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+${bp.initScript}`;
     chartLibTag = '<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"><\/script>';
   }
 
@@ -5252,6 +5303,7 @@ function generateReport(){
     .page-break{page-break-before:always;}
     table{page-break-inside:auto;}
     tr{page-break-inside:avoid;}
+    #bilanPerfWrap{display:none!important;}
   }
 </style>
 </head><body>
@@ -5410,7 +5462,7 @@ async function generateReportTech(){
 
   const basesLabel = selBases.map(bid=>baseNames[bid]||bid).join(', ');
 
-  // ── Section Bilan & Performance (optionnelle, agrégée sur toutes les bases sélectionnées) ──
+  // ── Section Bilan & Performance (optionnelle) — fichier HTML séparé, exclu du PDF ──
   let bilanPerfHtml='', bilanPerfScript='', chartLibTag='';
   if(document.getElementById('rptChkBilanPerf')?.checked){
     let allVehiclesAgg=[], allInterventionsAgg=[];
@@ -5421,13 +5473,32 @@ async function generateReportTech(){
       allInterventionsAgg.push(...bd.interventions);
     });
     const bp = buildBilanPerfSection(allVehiclesAgg, allInterventionsAgg, interventions, dFrom, dTo, 'bp', cfg);
-    bilanPerfHtml = `<div class="page-break"></div>
+    const standaloneTitle = `TechFleet — Bilan & Performance — ${tech} (${from} → ${to})`;
+    const standaloneDoc = buildStandaloneBilanPerfDoc(standaloneTitle, bp.html, bp.initScript, basesLabel);
+    bilanPerfHtml = `<div id="bilanPerfWrap">
+      <div class="no-print" style="background:#161922;border:1px dashed #9775fa;border-radius:10px;padding:16px 20px;margin:24px 0;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;">
+        <div>
+          <div style="font-size:13px;font-weight:800;color:#9775fa;">📊 Bilan &amp; Performance disponible</div>
+          <div style="font-size:11px;color:#6b7280;margin-top:2px;">Cette section n'est pas incluse dans le PDF imprimé ci-dessus. Téléchargez-la séparément en HTML.</div>
+        </div>
+        <button onclick="downloadBilanPerfHtml()" style="background:#9775fa;color:#000;border:none;border-radius:8px;padding:9px 18px;font-weight:700;cursor:pointer;font-size:12px;white-space:nowrap;">💾 Télécharger (HTML)</button>
+      </div>
       <div style="margin:10px 0 6px;">
-        <div style="font-size:10px;color:#9775fa;letter-spacing:2px;text-transform:uppercase;font-weight:700;">Vue d'ensemble — ${tech}</div>
+        <div style="font-size:10px;color:#9775fa;letter-spacing:2px;text-transform:uppercase;font-weight:700;">Vue d'ensemble — ${tech} (aperçu — non inclus au PDF)</div>
         <div style="font-size:20px;font-weight:900;color:#fff;">📊 Bilan &amp; Performance</div>
       </div>
-      ${bp.html}`;
-    bilanPerfScript = bp.initScript;
+      ${bp.html}
+    </div>`;
+    bilanPerfScript = `const _bilanPerfStandalone = ${JSON.stringify(standaloneDoc)};
+function downloadBilanPerfHtml(){
+  const blob = new Blob([_bilanPerfStandalone], {type:'text/html'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'TechFleet_Bilan_Performance_${tech.replace(/[^a-z0-9]/gi,'_')}_${from}_${to}.html';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+${bp.initScript}`;
     chartLibTag = '<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"><\/script>';
   }
 
@@ -5445,6 +5516,7 @@ async function generateReportTech(){
     .no-print{display:none!important;}
     .page-break{page-break-before:always;}
     tr{page-break-inside:avoid;}
+    #bilanPerfWrap{display:none!important;}
   }
 </style>
 </head><body>
