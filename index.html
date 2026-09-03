@@ -2086,6 +2086,239 @@ function toggleImeiDetail(imei){
   const el = document.getElementById(id);
   if(el) el.style.display = el.style.display==='none'?'':'none';
 }
+
+// ═══════════════════ TRAÇABILITÉ SIM ═══════════════════
+let simTrackSearch = '';
+function renderSimTracking(){
+  // Un numéro SIM est "installé" quand il apparaît en simNew, "retiré" quand il apparaît en simOld
+  const simMap = {};
+  data.interventions
+    .filter(i => i.simOld || i.simNew)
+    .sort((a,b) => new Date(a.date) - new Date(b.date))
+    .forEach(i => {
+      const vName = getVehicleName(i.vehicleId);
+      if(i.simNew){
+        if(!simMap[i.simNew]) simMap[i.simNew] = {sim:i.simNew, events:[], currentVehicle:null, currentDate:null};
+        simMap[i.simNew].events.push({type:'install', date:i.date, vehicle:vName, vehicleId:i.vehicleId, itype:i.type});
+        simMap[i.simNew].currentVehicle = vName;
+        simMap[i.simNew].currentDate = i.date;
+      }
+      if(i.simOld){
+        if(!simMap[i.simOld]) simMap[i.simOld] = {sim:i.simOld, events:[], currentVehicle:null, currentDate:null};
+        simMap[i.simOld].events.push({type:'desinstall', date:i.date, vehicle:vName, vehicleId:i.vehicleId, itype:i.type});
+        simMap[i.simOld].currentVehicle = null;
+        simMap[i.simOld].currentDate = null;
+      }
+    });
+
+  const sims = Object.values(simMap).map(tracker => {
+    let totalDays = 0;
+    const events = tracker.events;
+    for(let j=0; j<events.length; j++){
+      if(events[j].type==='install'){
+        const installDate = new Date(events[j].date);
+        const nextDes = events.slice(j+1).find(e=>e.type==='desinstall');
+        const endDate = nextDes ? new Date(nextDes.date) : new Date();
+        totalDays += Math.max(0, Math.floor((endDate - installDate) / (1000*60*60*24)));
+      }
+    }
+    return {...tracker, totalDays, isActive: !!tracker.currentVehicle};
+  }).sort((a,b) => b.totalDays - a.totalDays);
+
+  let filtered = sims;
+  if(simTrackSearch){
+    const q = simTrackSearch.toLowerCase();
+    filtered = sims.filter(t => t.sim.includes(q) || (t.currentVehicle||'').toLowerCase().includes(q));
+  }
+
+  if(!filtered.length){
+    return `<div style="text-align:center;padding:24px;color:var(--muted);font-size:13px">📱 Aucune SIM enregistrée${simTrackSearch?' pour cette recherche':''}</div>`;
+  }
+
+  const total = sims.length;
+  const active = sims.filter(i=>i.isActive).length;
+  const stocked = sims.filter(i=>!i.isActive).length;
+  const avgDays = sims.length ? Math.round(sims.reduce((s,i)=>s+i.totalDays,0)/sims.length) : 0;
+
+  const rows = filtered.map(t => {
+    const statusLabel = t.isActive
+      ? `<span style="background:rgba(46,201,123,.15);color:#2ec97b;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:700">ACTIVE</span>`
+      : `<span style="background:rgba(122,128,153,.15);color:#7a8099;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:700">EN STOCK</span>`;
+    const dureeColor = t.totalDays > 365 ? '#e05a2b' : t.totalDays > 180 ? '#ff9f43' : '#2ec97b';
+    const dureeStr = t.totalDays >= 365 ? `${Math.floor(t.totalDays/365)}a ${Math.floor((t.totalDays%365)/30)}m`
+      : t.totalDays >= 30 ? `${Math.floor(t.totalDays/30)}m ${t.totalDays%30}j` : `${t.totalDays}j`;
+    const lastInstall = [...t.events].reverse().find(e=>e.type==='install');
+    const vehicleStr = t.isActive ? t.currentVehicle : (lastInstall?.vehicle||'—');
+    const safeId = t.sim.replace(/[^a-z0-9]/gi,'_');
+    return `<tr style="cursor:pointer" onclick="toggleSimDetail('${t.sim}')">
+      <td style="font-family:'DM Mono',monospace;font-size:11px;font-weight:700;color:#2ec97b">${t.sim}</td>
+      <td>${statusLabel}</td>
+      <td style="font-size:12px;font-weight:600">${vehicleStr}</td>
+      <td><span style="font-family:'DM Mono',monospace;font-size:13px;font-weight:800;color:${dureeColor}">${dureeStr}</span></td>
+      <td style="color:var(--muted);font-size:11px">${t.events.length} événement(s)</td>
+    </tr>
+    <tr id="simdetail_${safeId}" style="display:none">
+      <td colspan="5" style="padding:0">
+        <div style="background:var(--surface2);border-radius:8px;margin:4px;padding:12px">
+          <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:8px;letter-spacing:1px">HISTORIQUE COMPLET</div>
+          ${t.events.map(e => {
+            const isInst = e.type==='install';
+            const col = isInst?'#2ec97b':'#e05a2b';
+            const icon = isInst?'📥':'📤';
+            return `<div style="display:flex;align-items:center;gap:10px;padding:5px 0;border-bottom:1px solid var(--border)">
+              <span style="font-size:14px">${icon}</span>
+              <span style="font-size:11px;font-family:'DM Mono',monospace;color:var(--muted);min-width:90px">${new Date(e.date).toLocaleDateString('fr-FR')}</span>
+              <span style="font-size:11px;font-weight:700;color:${col}">${isInst?'Installée':'Retirée'}</span>
+              <span style="font-size:11px;color:var(--muted)">·</span>
+              <span style="font-size:11px">${e.vehicle}</span>
+              <span style="font-size:10px;color:var(--muted)">${e.itype}</span>
+            </div>`;
+          }).join('')}
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+
+  return `<div>
+    <div class="sim-kpi-row" style="margin-bottom:12px">
+      <div class="sim-kpi"><div class="sim-kpi-val">${total}</div><div class="sim-kpi-lbl">SIM totales</div></div>
+      <div class="sim-kpi"><div class="sim-kpi-val" style="color:#2ec97b">${active}</div><div class="sim-kpi-lbl">Actives</div></div>
+      <div class="sim-kpi"><div class="sim-kpi-val" style="color:var(--muted)">${stocked}</div><div class="sim-kpi-lbl">En stock</div></div>
+      <div class="sim-kpi"><div class="sim-kpi-val" style="color:#ff9f43">${avgDays}j</div><div class="sim-kpi-lbl">Durée moy.</div></div>
+    </div>
+    <div style="margin-bottom:10px">
+      <input class="sim-search" type="text" placeholder="🔍 Rechercher un n° SIM, véhicule…"
+        oninput="simTrackSearch=this.value;document.getElementById('simTracking').innerHTML=renderSimTracking()">
+    </div>
+    <div class="sim-table-wrap"><table class="sim-table" style="min-width:500px">
+      <thead><tr><th>N° SIM</th><th>Statut</th><th>Véhicule</th><th>⏱ Durée active</th><th>Historique</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>
+    <div style="font-size:11px;color:var(--muted);margin-top:8px">💡 Cliquez sur une ligne pour voir l'historique complet</div>
+  </div>`;
+}
+function toggleSimDetail(sim){
+  const el = document.getElementById('simdetail_' + sim.replace(/[^a-z0-9]/gi,'_'));
+  if(el) el.style.display = el.style.display==='none'?'':'none';
+}
+
+// ═══════════════════ TRAÇABILITÉ KIT ADPLUS ═══════════════════
+let adplusTrackSearch = '';
+function renderAdplusTracking(){
+  const cfg = getCfg();
+  const itypes = cfg?.itypes || DEFAULT_ITYPES;
+  const installKeys = itypes.filter(t=>t.group==='install').map(t=>t.key);
+
+  const map = {};
+  data.interventions
+    .filter(i => i.serial && isAdplusType(i.type))
+    .sort((a,b) => new Date(a.date) - new Date(b.date))
+    .forEach(i => {
+      if(!map[i.serial]) map[i.serial] = {serial:i.serial, imei:i.imei||null, events:[], currentVehicle:null, currentDate:null};
+      const vName = getVehicleName(i.vehicleId);
+      if(installKeys.includes(i.type)){
+        map[i.serial].events.push({type:'install', date:i.date, vehicle:vName, vehicleId:i.vehicleId, itype:i.type});
+        map[i.serial].currentVehicle = vName;
+        map[i.serial].currentDate = i.date;
+        map[i.serial].imei = i.imei || map[i.serial].imei;
+      } else {
+        map[i.serial].events.push({type:'desinstall', date:i.date, vehicle:vName, vehicleId:i.vehicleId, itype:i.type});
+        map[i.serial].currentVehicle = null;
+        map[i.serial].currentDate = null;
+      }
+    });
+
+  const kits = Object.values(map).map(tracker => {
+    let totalDays = 0;
+    const events = tracker.events;
+    for(let j=0; j<events.length; j++){
+      if(events[j].type==='install'){
+        const installDate = new Date(events[j].date);
+        const nextDes = events.slice(j+1).find(e=>e.type==='desinstall');
+        const endDate = nextDes ? new Date(nextDes.date) : new Date();
+        totalDays += Math.max(0, Math.floor((endDate - installDate) / (1000*60*60*24)));
+      }
+    }
+    return {...tracker, totalDays, isActive: !!tracker.currentVehicle};
+  }).sort((a,b) => b.totalDays - a.totalDays);
+
+  let filtered = kits;
+  if(adplusTrackSearch){
+    const q = adplusTrackSearch.toLowerCase();
+    filtered = kits.filter(t => t.serial.toLowerCase().includes(q) || (t.imei||'').includes(q) || (t.currentVehicle||'').toLowerCase().includes(q));
+  }
+
+  if(!filtered.length){
+    return `<div style="text-align:center;padding:24px;color:var(--muted);font-size:13px">📦 Aucun Kit ADplus enregistré${adplusTrackSearch?' pour cette recherche':''}</div>`;
+  }
+
+  const total = kits.length;
+  const active = kits.filter(i=>i.isActive).length;
+  const stocked = kits.filter(i=>!i.isActive).length;
+  const avgDays = kits.length ? Math.round(kits.reduce((s,i)=>s+i.totalDays,0)/kits.length) : 0;
+
+  const rows = filtered.map(t => {
+    const statusLabel = t.isActive
+      ? `<span style="background:rgba(46,201,123,.15);color:#2ec97b;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:700">INSTALLÉ</span>`
+      : `<span style="background:rgba(122,128,153,.15);color:#7a8099;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:700">EN STOCK</span>`;
+    const dureeColor = t.totalDays > 365 ? '#e05a2b' : t.totalDays > 180 ? '#ff9f43' : '#2ec97b';
+    const dureeStr = t.totalDays >= 365 ? `${Math.floor(t.totalDays/365)}a ${Math.floor((t.totalDays%365)/30)}m`
+      : t.totalDays >= 30 ? `${Math.floor(t.totalDays/30)}m ${t.totalDays%30}j` : `${t.totalDays}j`;
+    const lastInstall = [...t.events].reverse().find(e=>e.type==='install');
+    const vehicleStr = t.isActive ? t.currentVehicle : (lastInstall?.vehicle||'—');
+    const safeId = t.serial.replace(/[^a-z0-9]/gi,'_');
+    return `<tr style="cursor:pointer" onclick="toggleAdplusDetail('${t.serial}')">
+      <td style="font-family:'DM Mono',monospace;font-size:11px;font-weight:700;color:#9b6dff">${t.serial}</td>
+      <td style="font-family:'DM Mono',monospace;font-size:11px;color:#4a9eff">${t.imei||'—'}</td>
+      <td>${statusLabel}</td>
+      <td style="font-size:12px;font-weight:600">${vehicleStr}</td>
+      <td><span style="font-family:'DM Mono',monospace;font-size:13px;font-weight:800;color:${dureeColor}">${dureeStr}</span></td>
+      <td style="color:var(--muted);font-size:11px">${t.events.length} événement(s)</td>
+    </tr>
+    <tr id="adplusdetail_${safeId}" style="display:none">
+      <td colspan="6" style="padding:0">
+        <div style="background:var(--surface2);border-radius:8px;margin:4px;padding:12px">
+          <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:8px;letter-spacing:1px">HISTORIQUE COMPLET</div>
+          ${t.events.map(e => {
+            const isInst = e.type==='install';
+            const col = isInst?'#2ec97b':'#e05a2b';
+            const icon = isInst?'📥':'📤';
+            return `<div style="display:flex;align-items:center;gap:10px;padding:5px 0;border-bottom:1px solid var(--border)">
+              <span style="font-size:14px">${icon}</span>
+              <span style="font-size:11px;font-family:'DM Mono',monospace;color:var(--muted);min-width:90px">${new Date(e.date).toLocaleDateString('fr-FR')}</span>
+              <span style="font-size:11px;font-weight:700;color:${col}">${isInst?'Installation':'Désinstallation'}</span>
+              <span style="font-size:11px;color:var(--muted)">·</span>
+              <span style="font-size:11px">${e.vehicle}</span>
+              <span style="font-size:10px;color:var(--muted)">${e.itype}</span>
+            </div>`;
+          }).join('')}
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+
+  return `<div>
+    <div class="sim-kpi-row" style="margin-bottom:12px">
+      <div class="sim-kpi"><div class="sim-kpi-val">${total}</div><div class="sim-kpi-lbl">Kits totaux</div></div>
+      <div class="sim-kpi"><div class="sim-kpi-val" style="color:#2ec97b">${active}</div><div class="sim-kpi-lbl">Installés</div></div>
+      <div class="sim-kpi"><div class="sim-kpi-val" style="color:var(--muted)">${stocked}</div><div class="sim-kpi-lbl">En stock</div></div>
+      <div class="sim-kpi"><div class="sim-kpi-val" style="color:#ff9f43">${avgDays}j</div><div class="sim-kpi-lbl">Durée moy.</div></div>
+    </div>
+    <div style="margin-bottom:10px">
+      <input class="sim-search" type="text" placeholder="🔍 Rechercher un Serial, IMEI, véhicule…"
+        oninput="adplusTrackSearch=this.value;document.getElementById('adplusTracking').innerHTML=renderAdplusTracking()">
+    </div>
+    <div class="sim-table-wrap"><table class="sim-table" style="min-width:600px">
+      <thead><tr><th>Serial ADplus</th><th>IMEI associé</th><th>Statut</th><th>Véhicule</th><th>⏱ Durée active</th><th>Historique</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>
+    <div style="font-size:11px;color:var(--muted);margin-top:8px">💡 Cliquez sur une ligne pour voir l'historique complet</div>
+  </div>`;
+}
+function toggleAdplusDetail(serial){
+  const el = document.getElementById('adplusdetail_' + serial.replace(/[^a-z0-9]/gi,'_'));
+  if(el) el.style.display = el.style.display==='none'?'':'none';
+}
 // ══════════════════════════════════════════════════════════════
 
 // ═══════════════════ GESTION DE STOCK ═══════════════════
@@ -2093,6 +2326,22 @@ function toggleImeiDetail(imei){
 // { items: [{id, name, category, unit, qty, minAlert, createdAt}], movements: [...] }
 
 const STOCK_PATH = () => currentPlatform + '__stock';
+
+// Validation numéro SIM : 9 chiffres si commence par 7, 10 chiffres si commence par 5
+function validateSimNumber(v){
+  if(!v) return false;
+  if(v[0]==='7') return /^7[0-9]{8}$/.test(v);
+  if(v[0]==='5') return /^5[0-9]{9}$/.test(v);
+  return false;
+}
+
+// Config générique des numéros de série par catégorie de stock — pilote les champs
+// dynamiques (IMEI / SIM / Serial ADplus) dans les modales d'ajout et d'ajustement de stock
+const STOCK_SERIAL_CONFIG = {
+  gps:    { field:'imeis',        label:'IMEI',          shortLabel:'IMEI',   icon:'📡', color:'#4a9eff', maxlength:15, digitsOnly:true,  placeholder:n=>`IMEI ${n} (15 chiffres)`,        validate:v=>/^[0-9]{15}$/.test(v),        errMsg:'IMEI invalide — 15 chiffres requis.' },
+  sim:    { field:'simNumbers',   label:'N° SIM',        shortLabel:'SIM',    icon:'📱', color:'#2ec97b', maxlength:10, digitsOnly:true,  placeholder:n=>`SIM ${n} (7XXXXXXXX ou 5XXXXXXXXX)`, validate:validateSimNumber,               errMsg:'N° SIM invalide — 9 chiffres si il commence par 7, 10 chiffres si il commence par 5.' },
+  adplus: { field:'adplusSerials',label:'Serial ADplus', shortLabel:'Serial', icon:'📦', color:'#9b6dff', maxlength:10, digitsOnly:false, placeholder:n=>`Serial ${n} (10 caractères)`,    validate:v=>v.length===10,                errMsg:'Serial invalide — 10 caractères requis.' },
+};
 
 const STOCK_CATEGORIES = {
   'gps':    {label:'Balise GPS',    icon:'📡', color:'#4a9eff'},
@@ -2194,16 +2443,17 @@ function renderStockUI(stock){
     const qtyColor = isOut?'#e05a2b':isLow?'#ff9f43':'#2ec97b';
     const badge = isOut?'<span style="background:rgba(224,90,43,.15);color:#e05a2b;font-size:10px;font-weight:700;padding:2px 7px;border-radius:6px;margin-left:6px">RUPTURE</span>':
                   isLow?'<span style="background:rgba(255,159,67,.15);color:#ff9f43;font-size:10px;font-weight:700;padding:2px 7px;border-radius:6px;margin-left:6px">STOCK BAS</span>':'';
-    // Afficher les IMEI pour les balises GPS
-    const imeiCount = (i.imeis||[]).length;
-    const imeiInfo = i.category==='gps' && imeiCount>0
-      ? `<div style="margin-top:4px"><span onclick="toggleStockImeiList('${i.id}')" style="font-size:10px;color:#4a9eff;cursor:pointer;font-family:'DM Mono',monospace">📡 ${imeiCount} IMEI enregistré(s) ▾</span>
+    // Afficher les numéros de série (IMEI / SIM / ADplus) selon la catégorie
+    const sConf = STOCK_SERIAL_CONFIG[i.category];
+    const sList = sConf ? (i[sConf.field]||[]) : [];
+    const serialInfo = sConf && sList.length>0
+      ? `<div style="margin-top:4px"><span onclick="toggleStockImeiList('${i.id}')" style="font-size:10px;color:${sConf.color};cursor:pointer;font-family:'DM Mono',monospace">${sConf.icon} ${sList.length} ${sConf.shortLabel} enregistré(s) ▾</span>
          <div id="imeiList_${i.id}" style="display:none;margin-top:4px;max-height:120px;overflow-y:auto">
-           ${(i.imeis||[]).map((imei,idx)=>`<div style="font-size:11px;font-family:'DM Mono',monospace;color:#4a9eff;padding:2px 0">#${idx+1} ${imei}</div>`).join('')}
+           ${sList.map((s,idx)=>`<div style="font-size:11px;font-family:'DM Mono',monospace;color:${sConf.color};padding:2px 0">#${idx+1} ${s}</div>`).join('')}
          </div></div>` : '';
     return `<tr>
       <td><span style="font-size:16px">${cat.icon}</span></td>
-      <td style="font-weight:700">${i.name}${badge}${imeiInfo}</td>
+      <td style="font-weight:700">${i.name}${badge}${serialInfo}</td>
       <td><span style="background:${cat.color}22;color:${cat.color};padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700">${cat.label}</span></td>
       <td style="font-family:'DM Mono',monospace;font-size:16px;font-weight:800;color:${qtyColor}">${i.qty}</td>
       <td style="color:var(--muted);font-size:12px">${i.unit||'unité(s)'}</td>
@@ -2258,6 +2508,16 @@ function renderStockUI(stock){
       <div style="font-size:13px;font-weight:700;color:var(--muted);margin-bottom:10px;letter-spacing:1px;text-transform:uppercase">📡 Traçabilité des balises par IMEI</div>
       <div id="imeiTracking">${renderImeiTracking()}</div>
     </div>
+    <!-- Suivi SIM -->
+    <div style="margin-top:28px">
+      <div style="font-size:13px;font-weight:700;color:var(--muted);margin-bottom:10px;letter-spacing:1px;text-transform:uppercase">📱 Traçabilité des cartes SIM</div>
+      <div id="simTracking">${renderSimTracking()}</div>
+    </div>
+    <!-- Suivi Kit ADplus -->
+    <div style="margin-top:28px">
+      <div style="font-size:13px;font-weight:700;color:var(--muted);margin-bottom:10px;letter-spacing:1px;text-transform:uppercase">📦 Traçabilité des Kits ADplus</div>
+      <div id="adplusTracking">${renderAdplusTracking()}</div>
+    </div>
   </div>`;
 }
 
@@ -2291,11 +2551,11 @@ function openAddStockItem(){
     <div class="fg"><label>Quantité initiale *</label><input type="number" id="stQty" value="0" min="0" oninput="updateStockImeiFields()" style="width:100%;box-sizing:border-box"></div>
     <div class="fg"><label>Unité</label><input type="text" id="stUnit" placeholder="unité(s), pcs, carte..." style="width:100%;box-sizing:border-box"></div>
     <div class="fg"><label>Alerte stock bas (quantité min)</label><input type="number" id="stMin" value="5" min="0" style="width:100%;box-sizing:border-box"></div>
-    <!-- Zone IMEI — visible uniquement pour les balises GPS -->
+    <!-- Zone numéros de série — visible pour balises GPS / SIM / Kit ADplus -->
     <div id="stImeiZone" style="display:none;">
       <div style="border-top:1px solid var(--border);margin:12px 0;padding-top:12px;">
-        <div style="font-size:12px;font-weight:700;color:#4a9eff;margin-bottom:10px;">📡 IMEI des balises (optionnel)</div>
-        <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">Renseignez les IMEI de chaque balise pour la traçabilité. Le nombre de champs suit la quantité saisie.</div>
+        <div style="font-size:12px;font-weight:700;margin-bottom:10px;" id="stImeiTitle"></div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">Renseignez les numéros de chaque article pour la traçabilité. Le nombre de champs suit la quantité saisie.</div>
         <div id="stImeiFields"></div>
       </div>
     </div>
@@ -2313,10 +2573,13 @@ function openAddStockItem(){
 
 function toggleStockImeiZone(){
   const cat = document.getElementById('stCat')?.value;
+  const conf = STOCK_SERIAL_CONFIG[cat];
   const zone = document.getElementById('stImeiZone');
+  const titleEl = document.getElementById('stImeiTitle');
   if(!zone) return;
-  zone.style.display = cat === 'gps' ? '' : 'none';
-  if(cat === 'gps'){
+  zone.style.display = conf ? '' : 'none';
+  if(conf){
+    if(titleEl) titleEl.innerHTML = `<span style="color:${conf.color}">${conf.icon} ${conf.label} (optionnel)</span>`;
     updateStockImeiFields();
     // S'assurer que la zone est bien visible (forcer le repaint)
     zone.offsetHeight;
@@ -2325,28 +2588,29 @@ function toggleStockImeiZone(){
 
 function updateStockImeiFields(){
   const cat = document.getElementById('stCat')?.value;
-  if(cat !== 'gps') return;
+  const conf = STOCK_SERIAL_CONFIG[cat];
+  if(!conf) return;
   const qty = parseInt(document.getElementById('stQty')?.value) || 0;
   const container = document.getElementById('stImeiFields');
   if(!container) return;
   const count = Math.min(qty, 50);
   const existing = Array.from(container.querySelectorAll('input')).map(i=>i.value);
   container.innerHTML = count === 0 ? `<div style="background:var(--surface2);border-radius:8px;padding:10px;text-align:center;">
-    <span style="font-size:20px">📡</span><br>
-    <span style="color:var(--muted);font-size:12px">Saisissez la quantité ci-dessus<br>pour afficher les champs IMEI</span>
+    <span style="font-size:20px">${conf.icon}</span><br>
+    <span style="color:var(--muted);font-size:12px">Saisissez la quantité ci-dessus<br>pour afficher les champs ${conf.label}</span>
   </div>` :
     Array.from({length:count}, (_,i) => `
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
         <span style="font-size:11px;color:var(--muted);min-width:24px;text-align:right">#${i+1}</span>
-        <input type="text" id="stImei_${i}" maxlength="15"
-          placeholder="IMEI ${i+1} (15 chiffres)"
-          oninput="this.value=this.value.replace(/[^0-9]/g,'')"
+        <input type="text" id="stImei_${i}" maxlength="${conf.maxlength}"
+          placeholder="${conf.placeholder(i+1)}"
+          oninput="${conf.digitsOnly?"this.value=this.value.replace(/[^0-9]/g,'');":""}"
           value="${existing[i]||''}"
           style="flex:1;font-family:'DM Mono',monospace;font-size:12px;letter-spacing:1px;padding:6px 8px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);">
-        ${existing[i]&&existing[i].length===15?'<span style="color:#2ec97b;font-size:14px">✓</span>':''}
+        ${existing[i]&&conf.validate(existing[i])?'<span style="color:#2ec97b;font-size:14px">✓</span>':''}
       </div>`).join('');
   if(qty > 50){
-    container.innerHTML += `<div style="color:#ff9f43;font-size:11px;margin-top:6px">⚠️ Maximum 50 IMEI par ajout. Pour plus, faites plusieurs ajouts.</div>`;
+    container.innerHTML += `<div style="color:#ff9f43;font-size:11px;margin-top:6px">⚠️ Maximum 50 ${conf.shortLabel} par ajout. Pour plus, faites plusieurs ajouts.</div>`;
   }
 }
 
@@ -2358,29 +2622,28 @@ async function saveStockItem(){
   const minAlert = parseInt(document.getElementById('stMin')?.value)||5;
   if(!name){alert('Nom requis.');return;}
 
-  // Collecter les IMEI saisis pour les balises GPS
-  let imeis = [];
-  if(cat === 'gps' && qty > 0){
+  // Collecter les numéros de série saisis (IMEI / SIM / ADplus) selon la catégorie
+  const sConf = STOCK_SERIAL_CONFIG[cat];
+  let serials = [];
+  if(sConf && qty > 0){
     const count = Math.min(qty, 50);
     for(let i=0; i<count; i++){
       const inp = document.getElementById('stImei_'+i);
       const val = inp?.value.trim()||'';
-      if(val.length===15) imeis.push(val);
-      else if(val.length>0 && val.length!==15){
-        alert('IMEI #'+(i+1)+' invalide — 15 chiffres requis. Laissez vide pour ignorer.');
-        return;
-      }
+      if(!val) continue;
+      if(sConf.validate(val)) serials.push(val);
+      else { alert(sConf.shortLabel+' #'+(i+1)+' invalide — '+sConf.errMsg+' Laissez vide pour ignorer.'); return; }
     }
-    // Vérifier les doublons avec le stock existant
+    // Vérifier les doublons avec le stock existant (même catégorie)
     const stock0 = await getStock();
-    const allExistingImeis = stock0.items.flatMap(i=>i.imeis||[]);
-    const dupImei = imeis.find(imei=>allExistingImeis.includes(imei));
-    if(dupImei){alert('IMEI '+dupImei+' déjà enregistré dans le stock.');return;}
+    const allExisting = stock0.items.filter(x=>x.category===cat).flatMap(x=>x[sConf.field]||[]);
+    const dup = serials.find(s=>allExisting.includes(s));
+    if(dup){alert(sConf.label+' '+dup+' déjà enregistré dans le stock.');return;}
   }
 
   const stock = await getStock();
   const newItem = {id:uid(),name,category:cat,qty,unit,minAlert,createdAt:new Date().toISOString(),createdBy:currentUser?.email};
-  if(imeis.length) newItem.imeis = imeis;
+  if(sConf && serials.length) newItem[sConf.field] = serials;
   stock.items.push(newItem);
 
   // Créer un mouvement d'entrée en stock
@@ -2400,17 +2663,17 @@ async function saveStockItem(){
 function openStockAdjust(itemId){
   const item = (_stockCache?.items||[]).find(i=>i.id===itemId);
   if(!item) return;
-  const existingImeis = item.imeis||[];
-  const isGps = item.category==='gps';
+  const sConf = STOCK_SERIAL_CONFIG[item.category];
+  const existingSerials = sConf ? (item[sConf.field]||[]) : [];
   const html = `<div class="mo open" id="moStockAdj"><div class="md" style="max-width:420px;max-height:90vh;overflow-y:auto;">
     <div class="mh"><span style="font-weight:800;font-size:15px">± Ajuster le stock</span><button class="mcl" onclick="closeMo('moStockAdj')">✕</button></div>
     <div style="font-size:13px;color:var(--muted);margin-bottom:12px">Article : <b style="color:var(--text)">${item.name}</b> — Stock actuel : <b style="color:var(--accent)">${item.qty}</b> ${item.unit}</div>
-    <div class="fg"><label>Nouvelle quantité *</label><input type="number" id="adjQty" value="${item.qty}" min="0" oninput="updateAdjImeiFields(${JSON.stringify(existingImeis)},${isGps})" style="width:100%;box-sizing:border-box"></div>
+    <div class="fg"><label>Nouvelle quantité *</label><input type="number" id="adjQty" value="${item.qty}" min="0" oninput="updateAdjImeiFields(${JSON.stringify(existingSerials)},'${item.category}')" style="width:100%;box-sizing:border-box"></div>
     <div class="fg"><label>Raison (optionnel)</label><input type="text" id="adjReason" placeholder="Réapprovisionnement, inventaire..." style="width:100%;box-sizing:border-box"></div>
-    ${isGps?`<div id="adjImeiZone" style="border-top:1px solid var(--border);margin-top:12px;padding-top:12px;">
-      <div style="font-size:12px;font-weight:700;color:#4a9eff;margin-bottom:8px">📡 IMEI enregistrés (${existingImeis.length}/${item.qty})</div>
-      ${existingImeis.length?`<div style="max-height:120px;overflow-y:auto;margin-bottom:10px">${existingImeis.map((imei,i)=>`<div style="font-size:11px;font-family:'DM Mono',monospace;color:#4a9eff;padding:2px 0">#${i+1} ${imei}</div>`).join('')}</div>`:''}
-      <div style="font-size:11px;color:var(--muted);margin-bottom:8px">Nouveaux IMEI à ajouter (si réapprovisionnement) :</div>
+    ${sConf?`<div id="adjImeiZone" style="border-top:1px solid var(--border);margin-top:12px;padding-top:12px;">
+      <div style="font-size:12px;font-weight:700;color:${sConf.color};margin-bottom:8px">${sConf.icon} ${sConf.label} enregistrés (${existingSerials.length}/${item.qty})</div>
+      ${existingSerials.length?`<div style="max-height:120px;overflow-y:auto;margin-bottom:10px">${existingSerials.map((s,i)=>`<div style="font-size:11px;font-family:'DM Mono',monospace;color:${sConf.color};padding:2px 0">#${i+1} ${s}</div>`).join('')}</div>`:''}
+      <div style="font-size:11px;color:var(--muted);margin-bottom:8px">Nouveaux ${sConf.shortLabel} à ajouter (si réapprovisionnement) :</div>
       <div id="adjImeiFields"></div>
     </div>`:''}
     <div style="display:flex;gap:10px;margin-top:16px">
@@ -2421,20 +2684,21 @@ function openStockAdjust(itemId){
   document.body.insertAdjacentHTML('beforeend', html);
 }
 
-function updateAdjImeiFields(existingImeis, isGps){
-  if(!isGps) return;
+function updateAdjImeiFields(existingSerials, category){
+  const conf = STOCK_SERIAL_CONFIG[category];
+  if(!conf) return;
   const newQty = parseInt(document.getElementById('adjQty')?.value)||0;
-  const currentQty = existingImeis.length;
+  const currentQty = existingSerials.length;
   const delta = Math.max(0, newQty - currentQty);
   const container = document.getElementById('adjImeiFields');
   if(!container) return;
-  if(delta===0){container.innerHTML='<div style="font-size:11px;color:var(--muted)">Pas de nouvelles balises à enregistrer.</div>';return;}
+  if(delta===0){container.innerHTML='<div style="font-size:11px;color:var(--muted)">Pas de nouveaux articles à enregistrer.</div>';return;}
   container.innerHTML = Array.from({length:Math.min(delta,50)}, (_,i)=>`
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
       <span style="font-size:11px;color:var(--muted);min-width:24px;text-align:right">#${currentQty+i+1}</span>
-      <input type="text" id="adjImei_${i}" maxlength="15"
-        placeholder="IMEI ${currentQty+i+1} (15 chiffres)"
-        oninput="this.value=this.value.replace(/[^0-9]/g,'')"
+      <input type="text" id="adjImei_${i}" maxlength="${conf.maxlength}"
+        placeholder="${conf.placeholder(currentQty+i+1)}"
+        oninput="${conf.digitsOnly?"this.value=this.value.replace(/[^0-9]/g,'');":""}"
         style="flex:1;font-family:'DM Mono',monospace;font-size:12px;letter-spacing:1px;padding:6px 8px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);">
     </div>`).join('');
 }
@@ -2446,23 +2710,22 @@ async function applyStockAdjust(itemId){
   const item = stock.items.find(i=>i.id===itemId);
   if(!item) return;
   const delta = newQty - item.qty;
-  // Collecter les nouveaux IMEI si balise GPS
-  if(item.category==='gps' && delta>0){
-    const newImeis = [];
+  // Collecter les nouveaux numéros de série selon la catégorie
+  const sConf = STOCK_SERIAL_CONFIG[item.category];
+  if(sConf && delta>0){
+    const newSerials = [];
     for(let i=0; i<Math.min(delta,50); i++){
       const inp = document.getElementById('adjImei_'+i);
       const val = inp?.value.trim()||'';
-      if(val.length===15) newImeis.push(val);
-      else if(val.length>0 && val.length!==15){
-        alert('IMEI #'+(i+1)+' invalide — 15 chiffres requis. Laissez vide pour ignorer.');
-        return;
-      }
+      if(!val) continue;
+      if(sConf.validate(val)) newSerials.push(val);
+      else { alert(sConf.shortLabel+' #'+(i+1)+' invalide — '+sConf.errMsg+' Laissez vide pour ignorer.'); return; }
     }
-    // Vérifier les doublons
-    const allExisting = stock.items.flatMap(i=>i.imeis||[]);
-    const dup = newImeis.find(imei=>allExisting.includes(imei));
-    if(dup){alert('IMEI '+dup+' déjà enregistré dans le stock.');return;}
-    if(newImeis.length) item.imeis = [...(item.imeis||[]), ...newImeis];
+    // Vérifier les doublons (même catégorie)
+    const allExisting = stock.items.filter(x=>x.category===item.category).flatMap(x=>x[sConf.field]||[]);
+    const dup = newSerials.find(s=>allExisting.includes(s));
+    if(dup){alert(sConf.label+' '+dup+' déjà enregistré dans le stock.');return;}
+    if(newSerials.length) item[sConf.field] = [...(item[sConf.field]||[]), ...newSerials];
   }
   item.qty = newQty;
   stock.movements = [...(stock.movements||[]), {
