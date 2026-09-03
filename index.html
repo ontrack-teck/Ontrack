@@ -740,6 +740,10 @@ tbody td{padding:11px 17px;font-size:12px;}
       style="flex:1;padding:8px;border-radius:7px;border:none;font-family:inherit;font-weight:700;font-size:12px;cursor:pointer;transition:all .15s;background:transparent;color:var(--muted);">
       👷 Rapport Technicien
     </button>
+    <button id="rptTabStock" onclick="switchRptTab('stock')"
+      style="flex:1;padding:8px;border-radius:7px;border:none;font-family:inherit;font-weight:700;font-size:12px;cursor:pointer;transition:all .15s;background:transparent;color:var(--muted);">
+      📦 Rapport Stock
+    </button>
   </div>
 
   <!-- Panneau Flotte -->
@@ -803,6 +807,34 @@ tbody td{padding:11px 17px;font-size:12px;}
       <span style="color:var(--text)">✔ Les véhicules sur lesquels il a travaillé (avec la base d'origine)</span>
     </div>
   </div><!-- /rptPaneTech -->
+
+  <!-- Panneau Stock -->
+  <div id="rptPaneStock" style="display:none;">
+    <div class="fg" style="margin-bottom:16px;">
+      <label style="margin-bottom:8px;display:block;">Sections à inclure</label>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--text);">
+          <input type="checkbox" id="rptChkStockSummary" checked style="accent-color:var(--accent);width:15px;height:15px;"> Résumé &amp; KPIs
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--text);">
+          <input type="checkbox" id="rptChkStockItems" checked style="accent-color:var(--accent);width:15px;height:15px;"> Liste des articles
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--text);">
+          <input type="checkbox" id="rptChkStockMovements" checked style="accent-color:var(--accent);width:15px;height:15px;"> Mouvements (période)
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--text);">
+          <input type="checkbox" id="rptChkStockTracking" checked style="accent-color:var(--accent);width:15px;height:15px;"> Traçabilité IMEI/SIM/ADplus
+        </label>
+      </div>
+    </div>
+    <div style="background:var(--surface2);border-radius:8px;padding:10px 14px;font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.7;">
+      Le rapport d'inventaire inclura :<br>
+      <span style="color:var(--text)">✔ L'état complet du stock à la date de génération (partagé toutes bases)</span><br>
+      <span style="color:var(--text)">✔ Alertes stock bas et ruptures</span><br>
+      <span style="color:var(--text)">✔ Historique des mouvements sur la période sélectionnée</span><br>
+      <span style="color:var(--text)">✔ Traçabilité des balises, SIM et Kits ADplus</span>
+    </div>
+  </div><!-- /rptPaneStock -->
 
   <!-- Option commune : Bilan & Performance (graphiques d'évolution) -->
   <div class="fg" style="margin-bottom:14px;background:var(--surface2);border-radius:8px;padding:12px 14px;">
@@ -5108,6 +5140,10 @@ function openReportModal(){
     const el=document.getElementById(id);
     if(el) el.onchange=updateRptPreview;
   });
+  ['rptChkStockSummary','rptChkStockItems','rptChkStockMovements','rptChkStockTracking'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el) el.onchange=updateRptPreview;
+  });
   document.getElementById('moReport').classList.add('open');
 }
 
@@ -5119,14 +5155,29 @@ let _rptMultiBaseCache = null; // { baseId: {vehicles, interventions} }
 function switchRptTab(tab){
   rptTab = tab;
   const isFlotte = tab === 'flotte';
+  const isTech = tab === 'tech';
+  const isStock = tab === 'stock';
   document.getElementById('rptPaneFlotte').style.display = isFlotte ? '' : 'none';
-  document.getElementById('rptPaneTech').style.display   = isFlotte ? 'none' : '';
+  document.getElementById('rptPaneTech').style.display   = isTech ? '' : 'none';
+  document.getElementById('rptPaneStock').style.display  = isStock ? '' : 'none';
   // Styles onglets
   const btnF = document.getElementById('rptTabFlotte');
   const btnT = document.getElementById('rptTabTech');
-  if(btnF){ btnF.style.background = isFlotte ? 'var(--accent)' : 'transparent'; btnF.style.color = isFlotte ? '#000' : 'var(--muted)'; }
-  if(btnT){ btnT.style.background = !isFlotte ? 'var(--accent)' : 'transparent'; btnT.style.color = !isFlotte ? '#000' : 'var(--muted)'; }
+  const btnS = document.getElementById('rptTabStock');
+  [[btnF,isFlotte],[btnT,isTech],[btnS,isStock]].forEach(([btn,active])=>{
+    if(btn){ btn.style.background = active ? 'var(--accent)' : 'transparent'; btn.style.color = active ? '#000' : 'var(--muted)'; }
+  });
+  // La section Bilan & Performance ne s'applique pas au rapport Stock
+  const bpChkWrap = document.getElementById('rptChkBilanPerf')?.closest('.fg');
+  if(bpChkWrap) bpChkWrap.style.display = isStock ? 'none' : '';
   if(tab==='tech' && !_rptMultiBaseCache){ loadRptMultiBaseData(); }
+  if(tab==='stock' && !_stockCache){ loadStockForReport(); }
+  updateRptPreview();
+}
+
+// Charger le stock pour l'aperçu/génération du rapport si pas déjà en cache
+async function loadStockForReport(){
+  await getStock();
   updateRptPreview();
 }
 
@@ -5193,6 +5244,15 @@ function updateRptPreview(){
   if(!from||!to){if(el)el.textContent='Sélectionnez une période.';return;}
   const dFrom=new Date(from),dTo=new Date(to+'T23:59:59');
   if(dTo<dFrom){if(el)el.innerHTML='<span style="color:var(--red)">⚠️ Date de fin antérieure à la date de début.</span>';return;}
+  if(rptTab==='stock'){
+    const stock = _stockCache || {items:[], movements:[]};
+    const items = stock.items||[];
+    const lowStock = items.filter(i=>i.qty>0 && i.qty<=i.minAlert).length;
+    const outStock = items.filter(i=>i.qty===0).length;
+    const movs = (stock.movements||[]).filter(m=>{const d=new Date(m.date);return d>=dFrom&&d<=dTo;});
+    if(el) el.innerHTML=`<b style="color:var(--accent)">${items.length}</b> article(s) &nbsp;·&nbsp; <b style="color:#ff9f43">${lowStock}</b> stock bas &nbsp;·&nbsp; <b style="color:#e05a2b">${outStock}</b> rupture &nbsp;·&nbsp; <b style="color:#4a9eff">${movs.length}</b> mouvement(s) période`;
+    return;
+  }
   if(rptTab==='tech'){
     const tech=document.getElementById('rptTech').value;
     if(!tech){if(el)el.innerHTML='<span style="color:var(--muted)">Sélectionnez un technicien.</span>';return;}
@@ -5409,8 +5469,205 @@ function buildStandaloneBilanPerfDoc(title, bpHtmlBlock, bpInitScript, basesLabe
 }
 // ══════════════════════════════════════════════════════════════════════
 
+// ═══════════════ RAPPORT STOCK / INVENTAIRE ═══════════════
+async function generateReportStock(){
+  const from=document.getElementById('rptFrom').value;
+  const to=document.getElementById('rptTo').value;
+  if(!from||!to){alert('Sélectionnez une période.');return;}
+  const dFrom=new Date(from), dTo=new Date(to+'T23:59:59');
+  if(dTo<dFrom){alert('La date de fin doit être après la date de début.');return;}
+
+  const stock = await getStock();
+  const items = stock.items||[];
+  const fmt=d=>d?new Date(d).toLocaleDateString('fr-FR'):'—';
+  const chk=id=>document.getElementById(id)?.checked;
+
+  const cell=(v,s='')=>`<td style="padding:7px 11px;font-size:12px;color:#e8eaf0;${s}">${v??'—'}</td>`;
+  const hdr=(cols,color='#f0a500')=>`<tr>${cols.map(h=>`<th style="background:#2a2d36;color:${color};padding:8px 11px;text-align:left;font-size:10px;letter-spacing:1px;text-transform:uppercase;border-bottom:2px solid ${color};">${h}</th>`).join('')}</tr>`;
+  const row=(cells,alt=false)=>`<tr style="background:${alt?'#1a1d26':'#161922'};">${cells.map(([v,s])=>cell(v,s||'')).join('')}</tr>`;
+  const secTitle=(n,title,color='#f0a500')=>`
+    <div style="margin:28px 0 10px;border-left:4px solid ${color};padding-left:12px;">
+      <div style="font-size:9px;color:${color};letter-spacing:2px;font-weight:700;text-transform:uppercase;margin-bottom:2px;">Section ${n}</div>
+      <div style="font-size:16px;font-weight:800;color:#fff;">${title}</div>
+    </div>`;
+  const kpiBox=(label,val,color='#f0a500')=>`
+    <div style="background:#161922;border-radius:10px;padding:14px 18px;border:1px solid #2a2d36;flex:1;min-width:120px;">
+      <div style="font-size:24px;font-weight:800;color:${color};">${val}</div>
+      <div style="font-size:10px;color:#6b7280;margin-top:3px;">${label}</div>
+    </div>`;
+
+  // ── KPIs ──────────────────────────────────────────────
+  const totalItems = items.length;
+  const totalQty = items.reduce((s,i)=>s+i.qty,0);
+  const lowStock = items.filter(i=>i.qty>0 && i.qty<=i.minAlert).length;
+  const outStock = items.filter(i=>i.qty===0).length;
+
+  let sections_html = '';
+  let secN = 1;
+
+  if(chk('rptChkStockSummary')){
+    sections_html += secTitle(secN++, 'Résumé & KPIs');
+    sections_html += `<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px;">
+      ${kpiBox('Articles', totalItems, '#f0a500')}
+      ${kpiBox('Total unités', totalQty, '#4a9eff')}
+      ${kpiBox('Stock bas', lowStock, '#ff9f43')}
+      ${kpiBox('Rupture', outStock, '#e05a2b')}
+    </div>`;
+    // Répartition par catégorie
+    const catRows = Object.entries(STOCK_CATEGORIES).map(([k,v],idx)=>{
+      const catItems = items.filter(i=>i.category===k);
+      const qty = catItems.reduce((s,i)=>s+i.qty,0);
+      return row([[`${v.icon} ${v.label}`,`color:${v.color};font-weight:700`],[catItems.length,'text-align:center'],[qty,'text-align:center;font-weight:800;color:#4a9eff']],idx%2===1);
+    }).join('');
+    sections_html += `<table style="width:100%;border-collapse:collapse;margin-bottom:8px;">
+      <thead>${hdr(['Catégorie','Articles','Unités totales'])}</thead>
+      <tbody>${catRows}</tbody>
+    </table>`;
+  }
+
+  if(chk('rptChkStockItems')){
+    sections_html += secTitle(secN++, 'Liste des articles', '#4a9eff');
+    const itemRows = items.length ? items.map((i,idx)=>{
+      const cat = STOCK_CATEGORIES[i.category]||STOCK_CATEGORIES.autre;
+      const isOut = i.qty===0, isLow = i.qty>0 && i.qty<=i.minAlert;
+      const statusLbl = isOut?'<span style="color:#e05a2b;font-weight:700">RUPTURE</span>':isLow?'<span style="color:#ff9f43;font-weight:700">STOCK BAS</span>':'<span style="color:#2ec97b">OK</span>';
+      return row([
+        [`${cat.icon} ${i.name}`,'font-weight:700'],
+        [cat.label,`color:${cat.color}`],
+        [i.qty,'text-align:center;font-weight:800;font-family:monospace'],
+        [i.unit||'unité(s)',''],
+        [i.minAlert||0,'text-align:center'],
+        [statusLbl,'text-align:center']
+      ],idx%2===1);
+    }).join('') : '';
+    sections_html += itemRows ? `<table style="width:100%;border-collapse:collapse;margin-bottom:8px;">
+      <thead>${hdr(['Article','Catégorie','Quantité','Unité','Alerte min','Statut'],'#4a9eff')}</thead>
+      <tbody>${itemRows}</tbody>
+    </table>` : '<p style="color:#6b7280;padding:10px 0;">Aucun article en stock</p>';
+  }
+
+  if(chk('rptChkStockMovements')){
+    sections_html += secTitle(secN++, `Mouvements (${fmt(from)} → ${fmt(to)})`, '#2ec97b');
+    const movs = (stock.movements||[]).filter(m=>{const d=new Date(m.date);return d>=dFrom&&d<=dTo;}).sort((a,b)=>new Date(b.date)-new Date(a.date));
+    const movRows = movs.map((m,idx)=>{
+      const isPos = m.delta>0;
+      return row([
+        [fmt(m.date),'font-family:monospace'],
+        [m.itemName||'—','font-weight:700'],
+        [`${isPos?'+':''}${m.delta} → ${m.qty}`,`color:${isPos?'#2ec97b':'#e05a2b'};font-weight:800;font-family:monospace`],
+        [m.reason||m.interventionType||'—','color:#6b7280'],
+        [m.vehicle||'—',''],
+        [m.base||'—','']
+      ],idx%2===1);
+    }).join('');
+    sections_html += movRows ? `<table style="width:100%;border-collapse:collapse;margin-bottom:8px;font-size:11px;">
+      <thead>${hdr(['Date','Article','Mouvement','Raison / Type','Véhicule','Base'],'#2ec97b')}</thead>
+      <tbody>${movRows}</tbody>
+    </table>` : '<p style="color:#6b7280;padding:10px 0;">Aucun mouvement sur cette période</p>';
+  }
+
+  if(chk('rptChkStockTracking')){
+    sections_html += secTitle(secN++, 'Traçabilité IMEI / SIM / Kits ADplus', '#9b6dff');
+
+    // IMEI
+    const cfg=getCfg();
+    const itypes=cfg?.itypes||DEFAULT_ITYPES;
+    const installKeys=itypes.filter(t=>t.group==='install').map(t=>t.key);
+    const desKeys=itypes.filter(t=>t.group==='desinstall').map(t=>t.key);
+    const imeiMap={};
+    data.interventions.filter(i=>i.imei).sort((a,b)=>new Date(a.date)-new Date(b.date)).forEach(i=>{
+      if(!imeiMap[i.imei]) imeiMap[i.imei]={imei:i.imei, cur:null};
+      if(installKeys.includes(i.type)) imeiMap[i.imei].cur=getVehicleName(i.vehicleId);
+      else if(desKeys.includes(i.type)) imeiMap[i.imei].cur=null;
+    });
+    const imeiList = Object.values(imeiMap);
+    sections_html += `<div style="font-size:12px;font-weight:700;color:#4a9eff;margin:14px 0 6px;">📡 Balises GPS (${imeiList.length} — ${imeiList.filter(t=>t.cur).length} installées)</div>`;
+    const imeiRows = imeiList.map((t,idx)=>row([[t.imei,'font-family:monospace;color:#4a9eff'],[t.cur?'<span style="color:#2ec97b">INSTALLÉE</span>':'<span style="color:#7a8099">EN STOCK</span>','text-align:center'],[t.cur||'—','']],idx%2===1)).join('');
+    sections_html += imeiRows ? `<table style="width:100%;border-collapse:collapse;margin-bottom:8px;font-size:11px;"><thead>${hdr(['IMEI','Statut','Véhicule'],'#4a9eff')}</thead><tbody>${imeiRows}</tbody></table>` : '<p style="color:#6b7280;padding:6px 0;font-size:11px;">Aucune balise</p>';
+
+    // SIM
+    const simMap={};
+    data.interventions.filter(i=>i.simOld||i.simNew).sort((a,b)=>new Date(a.date)-new Date(b.date)).forEach(i=>{
+      if(i.simNew){ if(!simMap[i.simNew])simMap[i.simNew]={sim:i.simNew,cur:null}; simMap[i.simNew].cur=getVehicleName(i.vehicleId); }
+      if(i.simOld){ if(!simMap[i.simOld])simMap[i.simOld]={sim:i.simOld,cur:null}; simMap[i.simOld].cur=null; }
+    });
+    const simList = Object.values(simMap);
+    sections_html += `<div style="font-size:12px;font-weight:700;color:#2ec97b;margin:14px 0 6px;">📱 Cartes SIM (${simList.length} — ${simList.filter(t=>t.cur).length} actives)</div>`;
+    const simRows = simList.map((t,idx)=>row([[t.sim,'font-family:monospace;color:#2ec97b'],[t.cur?'<span style="color:#2ec97b">ACTIVE</span>':'<span style="color:#7a8099">EN STOCK</span>','text-align:center'],[t.cur||'—','']],idx%2===1)).join('');
+    sections_html += simRows ? `<table style="width:100%;border-collapse:collapse;margin-bottom:8px;font-size:11px;"><thead>${hdr(['N° SIM','Statut','Véhicule'],'#2ec97b')}</thead><tbody>${simRows}</tbody></table>` : '<p style="color:#6b7280;padding:6px 0;font-size:11px;">Aucune SIM</p>';
+
+    // ADplus
+    const adMap={};
+    data.interventions.filter(i=>i.serial && isAdplusType(i.type)).sort((a,b)=>new Date(a.date)-new Date(b.date)).forEach(i=>{
+      if(!adMap[i.serial]) adMap[i.serial]={serial:i.serial, imei:i.imei||null, cur:null};
+      if(installKeys.includes(i.type)){ adMap[i.serial].cur=getVehicleName(i.vehicleId); adMap[i.serial].imei=i.imei||adMap[i.serial].imei; }
+      else adMap[i.serial].cur=null;
+    });
+    const adList = Object.values(adMap);
+    sections_html += `<div style="font-size:12px;font-weight:700;color:#9b6dff;margin:14px 0 6px;">📦 Kits ADplus (${adList.length} — ${adList.filter(t=>t.cur).length} installés)</div>`;
+    const adRows = adList.map((t,idx)=>row([[t.serial,'font-family:monospace;color:#9b6dff'],[t.imei||'—','font-family:monospace;color:#4a9eff'],[t.cur?'<span style="color:#2ec97b">INSTALLÉ</span>':'<span style="color:#7a8099">EN STOCK</span>','text-align:center'],[t.cur||'—','']],idx%2===1)).join('');
+    sections_html += adRows ? `<table style="width:100%;border-collapse:collapse;margin-bottom:8px;font-size:11px;"><thead>${hdr(['Serial','IMEI associé','Statut','Véhicule'],'#9b6dff')}</thead><tbody>${adRows}</tbody></table>` : '<p style="color:#6b7280;padding:6px 0;font-size:11px;">Aucun kit</p>';
+  }
+
+  // ── Assembler le HTML complet ────────────────────────────
+  const html=`<!DOCTYPE html>
+<html lang="fr"><head>
+<meta charset="UTF-8">
+<title>TechFleet — Rapport d'inventaire (${from} → ${to})</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:'Segoe UI',Arial,sans-serif;background:#0d0f14;color:#e8eaf0;padding:0;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  @media print{
+    *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;color-adjust:exact!important;}
+    body{background:#0d0f14!important;color:#e8eaf0!important;}
+    .no-print{display:none!important;}
+    .page-break{page-break-before:always;}
+    table{page-break-inside:auto;}
+    tr{page-break-inside:avoid;}
+  }
+</style>
+</head><body>
+<div style="max-width:900px;margin:0 auto;padding:30px 24px;">
+
+  <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:32px;">
+    <div>
+      <div style="font-size:28px;font-weight:900;color:#f0a500;letter-spacing:-1px;">TechFleet</div>
+      <div style="font-size:11px;color:#6b7280;letter-spacing:3px;font-weight:700;text-transform:uppercase;">Gestion de Flotte</div>
+      <div style="margin-top:12px;font-size:20px;font-weight:800;color:#fff;">📦 Rapport d'inventaire</div>
+      <div style="color:#6b7280;font-size:12px;margin-top:4px;">Période mouvements : <b style="color:#e8eaf0">${fmt(from)}</b> → <b style="color:#e8eaf0">${fmt(to)}</b></div>
+      <div style="color:#6b7280;font-size:12px;margin-top:2px;">Stock partagé · Base courante : <b style="color:#f0a500">${currentBase}</b></div>
+    </div>
+    <div style="text-align:right;font-size:11px;color:#6b7280;padding-top:8px;">
+      <div>Généré par : ${currentUser?.email||''}</div>
+      <div>Le : ${fmt(new Date())}</div>
+      <div style="margin-top:12px;">
+        <button class="no-print" onclick="window.print()"
+          style="background:#f0a500;color:#000;border:none;border-radius:8px;padding:9px 20px;font-weight:700;cursor:pointer;font-size:12px;">
+          🖨️ Imprimer / PDF
+        </button>
+      </div>
+    </div>
+  </div>
+
+  ${sections_html}
+
+  <div style="margin-top:40px;padding-top:16px;border-top:1px solid #2a2d36;font-size:10px;color:#6b7280;text-align:center;">
+    TechFleet Gestion de Flotte &nbsp;·&nbsp; Rapport d'inventaire &nbsp;·&nbsp; Généré le ${fmt(new Date())} &nbsp;·&nbsp; ${currentUser?.email||''}
+  </div>
+</div>
+</body></html>`;
+
+  const win=window.open('','_blank');
+  if(!win){alert("Le navigateur a bloqué le popup. Autorisez les popups pour ce fichier.");return;}
+  win.document.write(html);
+  win.document.close();
+  closeMo('moReport');
+}
+// ══════════════════════════════════════════════════════════════════════
+
 function generateReport(){
   if(rptTab==='tech'){ generateReportTech(); return; }
+  if(rptTab==='stock'){ generateReportStock(); return; }
   const from=document.getElementById('rptFrom').value;
   const to=document.getElementById('rptTo').value;
   const vid=document.getElementById('rptVehicle').value;
