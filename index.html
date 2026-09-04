@@ -2621,7 +2621,7 @@ function openAddStockItem(){
         <div id="stImeiFields"></div>
       </div>
     </div>
-    <div style="display:flex;gap:10px;margin-top:16px">
+    <div style="display:flex;gap:10px;margin-top:16px;position:sticky;bottom:-24px;background:var(--surface);padding:12px 0 4px;">
       <button class="abtn" onclick="saveStockItem()" style="flex:1">Enregistrer</button>
       <button class="mcan" onclick="closeMo('moStock')" style="flex:1">Annuler</button>
     </div>
@@ -2713,6 +2713,12 @@ function importStockSerialList(){
     if(invalid.length) msg += `<br><span style="color:#ff9f43">⚠️ ${invalid.length} ignoré(s) — ${conf.errMsg}<br><span style="color:var(--muted);font-family:'DM Mono',monospace">${invalid.slice(0,10).join(', ')}${invalid.length>10?'…':''}</span></span>`;
     resultEl.innerHTML = msg;
   }
+  // Fermer le clavier virtuel (mobile) et ramener les boutons Enregistrer/Annuler à l'écran
+  document.getElementById('stImportList')?.blur();
+  document.activeElement?.blur();
+  setTimeout(()=>{
+    document.querySelector('#moStock .abtn')?.scrollIntoView({behavior:'smooth', block:'end'});
+  }, 150);
 }
 
 async function saveStockItem(){
@@ -2784,7 +2790,7 @@ function openStockAdjust(itemId){
       </div>
       <div id="adjImeiFields"></div>
     </div>`:''}
-    <div style="display:flex;gap:10px;margin-top:16px">
+    <div style="display:flex;gap:10px;margin-top:16px;position:sticky;bottom:-24px;background:var(--surface);padding:12px 0 4px;">
       <button class="abtn" onclick="applyStockAdjust('${itemId}')" style="flex:1">Enregistrer</button>
       <button class="mcan" onclick="closeMo('moStockAdj')" style="flex:1">Annuler</button>
     </div>
@@ -2847,6 +2853,12 @@ function importAdjSerialList(existingSerials, category){
     if(dupExisting.length) msg += `<br><span style="color:#ff9f43">⚠️ ${dupExisting.length} déjà enregistré(s) ignoré(s).</span>`;
     resultEl.innerHTML = msg;
   }
+  // Fermer le clavier virtuel (mobile) et ramener les boutons Enregistrer/Annuler à l'écran
+  document.getElementById('adjImportList')?.blur();
+  document.activeElement?.blur();
+  setTimeout(()=>{
+    document.querySelector('#moStockAdj .abtn')?.scrollIntoView({behavior:'smooth', block:'end'});
+  }, 150);
 }
 
 async function applyStockAdjust(itemId){
