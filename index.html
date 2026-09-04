@@ -1852,6 +1852,7 @@ const LOG_LABELS = {
   user_role:          {icon:'🎖️', label:'Rôle modifié'},
   user_login:         {icon:'🔑', label:'Connexion'},
   vehicle_transfert:  {icon:'🔄', label:'Transfert de balise'},
+  stock_movement_delete: {icon:'🗑', label:'Mouvement stock annulé'},
 };
 
 // Variables pour l'onglet logs
@@ -2556,8 +2557,9 @@ function renderStockUI(stock){
 function renderStockMovements(movements){
   const recent = [...movements].sort((a,b)=>new Date(b.date)-new Date(a.date)).slice(0,20);
   if(!recent.length) return '<div style="color:var(--muted);font-size:12px;padding:8px 0">Aucun mouvement enregistré</div>';
+  const isAdmin = currentUser?.role==='admin';
   return `<div class="sim-table-wrap"><table class="sim-table">
-    <thead><tr><th>Date</th><th>Article</th><th>Mouvement</th><th>Type intervention</th><th>Véhicule</th><th>Base</th></tr></thead>
+    <thead><tr><th>Date</th><th>Article</th><th>Mouvement</th><th>Type intervention</th><th>Véhicule</th><th>Base</th>${isAdmin?'<th>Action</th>':''}</tr></thead>
     <tbody>${recent.map(m=>{
       const isPos=m.delta>0;
       return `<tr>
@@ -2567,10 +2569,31 @@ function renderStockMovements(movements){
         <td style="font-size:11px;color:var(--muted)">${m.interventionType||m.reason||'—'}</td>
         <td style="font-size:11px">${m.vehicle||'—'}</td>
         <td><span style="background:rgba(74,158,255,.1);color:var(--blue);padding:2px 6px;border-radius:5px;font-size:10px">${m.base||'—'}</span></td>
+        ${isAdmin?`<td><button onclick="deleteStockMovement('${m.id}')" title="Supprimer ce mouvement (erreur d'enregistrement)" style="background:rgba(224,90,43,.1);color:#e05a2b;border:1px solid #e05a2b;border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer">🗑</button></td>`:''}
       </tr>`;
     }).join('')}</tbody>
   </table></div>`;
 }
+
+// Supprimer un mouvement de stock (erreur d'enregistrement) — annule aussi son effet sur la quantité
+async function deleteStockMovement(movementId){
+  if(currentUser?.role!=='admin'){alert('Accès réservé aux administrateurs.');return;}
+  const stock = await getStock();
+  const mov = (stock.movements||[]).find(m=>m.id===movementId);
+  if(!mov){alert('Mouvement introuvable.');return;}
+  const isPos = mov.delta>0;
+  if(!confirm(`Supprimer ce mouvement ?\n${mov.itemName||'Article'} : ${isPos?'+':''}${mov.delta} (le ${new Date(mov.date).toLocaleDateString('fr-FR')})\n\nLa quantité de l'article sera automatiquement recalculée en annulant cet effet.`)) return;
+  const item = stock.items.find(i=>i.id===mov.itemId);
+  if(item){
+    // Annuler l'effet du mouvement sur la quantité actuelle
+    item.qty = Math.max(0, item.qty - mov.delta);
+  }
+  stock.movements = (stock.movements||[]).filter(m=>m.id!==movementId);
+  await saveStock(stock);
+  addLog('stock_movement_delete', `${mov.itemName||'Article'} : annulation de ${isPos?'+':''}${mov.delta} (${mov.reason||mov.interventionType||'—'})`, mov.itemId);
+  renderStockUI(stock);
+}
+// ═══════════════════════════════════════════════════════════
 
 // ─── MODALES STOCK ────────────────────────────────────────
 function openAddStockItem(){
@@ -2588,6 +2611,13 @@ function openAddStockItem(){
       <div style="border-top:1px solid var(--border);margin:12px 0;padding-top:12px;">
         <div style="font-size:12px;font-weight:700;margin-bottom:10px;" id="stImeiTitle"></div>
         <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">Renseignez les numéros de chaque article pour la traçabilité. Le nombre de champs suit la quantité saisie.</div>
+        <!-- Import en masse -->
+        <div style="background:var(--surface2);border:1px dashed var(--border);border-radius:8px;padding:10px;margin-bottom:12px;">
+          <label style="font-size:11px;color:var(--blue);font-weight:700;display:block;margin-bottom:6px;">📋 Importer une liste (un numéro par ligne)</label>
+          <textarea id="stImportList" rows="3" placeholder="Collez votre liste ici, un numéro par ligne…" style="width:100%;box-sizing:border-box;font-family:'DM Mono',monospace;font-size:11px;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px;color:var(--text);resize:vertical;"></textarea>
+          <button type="button" onclick="importStockSerialList()" style="margin-top:6px;background:var(--blue);color:#000;border:none;border-radius:6px;padding:6px 14px;font-size:11px;font-weight:700;cursor:pointer;">⬆️ Importer la liste</button>
+          <div id="stImportResult" style="font-size:11px;margin-top:6px;"></div>
+        </div>
         <div id="stImeiFields"></div>
       </div>
     </div>
@@ -2643,6 +2673,45 @@ function updateStockImeiFields(){
       </div>`).join('');
   if(qty > 50){
     container.innerHTML += `<div style="color:#ff9f43;font-size:11px;margin-top:6px">⚠️ Maximum 50 ${conf.shortLabel} par ajout. Pour plus, faites plusieurs ajouts.</div>`;
+  }
+}
+
+// Import en masse d'une liste de numéros (IMEI/SIM/Serial) collée par l'utilisateur
+// Catégorie et nom de l'article doivent être saisis AVANT l'import
+function importStockSerialList(){
+  const name = document.getElementById('stName')?.value.trim();
+  const cat = document.getElementById('stCat')?.value;
+  const conf = STOCK_SERIAL_CONFIG[cat];
+  const resultEl = document.getElementById('stImportResult');
+  if(!name){ if(resultEl) resultEl.innerHTML='<span style="color:var(--red)">⚠️ Renseignez d\'abord le nom de l\'article.</span>'; return; }
+  if(!conf){ if(resultEl) resultEl.innerHTML='<span style="color:var(--red)">⚠️ Sélectionnez d\'abord une catégorie (Balise GPS, SIM ou Kit ADplus).</span>'; return; }
+  const raw = document.getElementById('stImportList')?.value || '';
+  const tokens = raw.split(/[\n,;]+/).map(t=>t.trim()).filter(Boolean);
+  if(!tokens.length){ if(resultEl) resultEl.innerHTML='<span style="color:var(--red)">Aucun numéro trouvé dans la liste collée.</span>'; return; }
+  const valid=[], invalid=[], seen=new Set();
+  tokens.forEach(t=>{
+    if(!conf.validate(t)){ invalid.push(t); return; }
+    if(seen.has(t)) return; // doublon dans la liste elle-même, ignoré silencieusement
+    seen.add(t); valid.push(t);
+  });
+  if(valid.length > 50){
+    if(resultEl) resultEl.innerHTML = `<span style="color:#ff9f43">⚠️ ${valid.length} numéros valides trouvés mais le maximum est 50 par ajout. Seuls les 50 premiers seront importés.</span>`;
+    valid.length = 50;
+  }
+  if(!valid.length){
+    if(resultEl) resultEl.innerHTML = `<span style="color:var(--red)">Aucun numéro valide — ${conf.errMsg}</span>${invalid.length?`<br><span style="color:var(--muted)">Rejetés : ${invalid.slice(0,10).join(', ')}${invalid.length>10?'…':''}</span>`:''}`;
+    return;
+  }
+  // Ajuster la quantité et régénérer les champs avec les valeurs importées
+  const qtyInput = document.getElementById('stQty');
+  if(qtyInput) qtyInput.value = valid.length;
+  updateStockImeiFields();
+  valid.forEach((v,i)=>{ const inp=document.getElementById('stImei_'+i); if(inp) inp.value=v; });
+  updateStockImeiFields(); // deuxième passe pour afficher les coches ✓
+  if(resultEl){
+    let msg = `<span style="color:#2ec97b">✅ ${valid.length} ${conf.shortLabel} importé(s) — quantité ajustée automatiquement.</span>`;
+    if(invalid.length) msg += `<br><span style="color:#ff9f43">⚠️ ${invalid.length} ignoré(s) — ${conf.errMsg}<br><span style="color:var(--muted);font-family:'DM Mono',monospace">${invalid.slice(0,10).join(', ')}${invalid.length>10?'…':''}</span></span>`;
+    resultEl.innerHTML = msg;
   }
 }
 
@@ -2706,6 +2775,13 @@ function openStockAdjust(itemId){
       <div style="font-size:12px;font-weight:700;color:${sConf.color};margin-bottom:8px">${sConf.icon} ${sConf.label} enregistrés (${existingSerials.length}/${item.qty})</div>
       ${existingSerials.length?`<div style="max-height:120px;overflow-y:auto;margin-bottom:10px">${existingSerials.map((s,i)=>`<div style="font-size:11px;font-family:'DM Mono',monospace;color:${sConf.color};padding:2px 0">#${i+1} ${s}</div>`).join('')}</div>`:''}
       <div style="font-size:11px;color:var(--muted);margin-bottom:8px">Nouveaux ${sConf.shortLabel} à ajouter (si réapprovisionnement) :</div>
+      <!-- Import en masse -->
+      <div style="background:var(--surface2);border:1px dashed var(--border);border-radius:8px;padding:10px;margin-bottom:12px;">
+        <label style="font-size:11px;color:var(--blue);font-weight:700;display:block;margin-bottom:6px;">📋 Importer une liste (un numéro par ligne)</label>
+        <textarea id="adjImportList" rows="3" placeholder="Collez votre liste ici, un numéro par ligne…" style="width:100%;box-sizing:border-box;font-family:'DM Mono',monospace;font-size:11px;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px;color:var(--text);resize:vertical;"></textarea>
+        <button type="button" onclick="importAdjSerialList(${JSON.stringify(existingSerials)},'${item.category}')" style="margin-top:6px;background:var(--blue);color:#000;border:none;border-radius:6px;padding:6px 14px;font-size:11px;font-weight:700;cursor:pointer;">⬆️ Importer la liste</button>
+        <div id="adjImportResult" style="font-size:11px;margin-top:6px;"></div>
+      </div>
       <div id="adjImeiFields"></div>
     </div>`:''}
     <div style="display:flex;gap:10px;margin-top:16px">
@@ -2733,6 +2809,44 @@ function updateAdjImeiFields(existingSerials, category){
         oninput="${conf.digitsOnly?"this.value=this.value.replace(/[^0-9]/g,'');":""}"
         style="flex:1;font-family:'DM Mono',monospace;font-size:12px;letter-spacing:1px;padding:6px 8px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);">
     </div>`).join('');
+}
+
+// Import en masse pour le réapprovisionnement (modale ± Ajuster)
+function importAdjSerialList(existingSerials, category){
+  const conf = STOCK_SERIAL_CONFIG[category];
+  const resultEl = document.getElementById('adjImportResult');
+  if(!conf){ if(resultEl) resultEl.innerHTML='<span style="color:var(--red)">Catégorie invalide.</span>'; return; }
+  const raw = document.getElementById('adjImportList')?.value || '';
+  const tokens = raw.split(/[\n,;]+/).map(t=>t.trim()).filter(Boolean);
+  if(!tokens.length){ if(resultEl) resultEl.innerHTML='<span style="color:var(--red)">Aucun numéro trouvé dans la liste collée.</span>'; return; }
+  const existingSet = new Set(existingSerials);
+  const valid=[], invalid=[], dupExisting=[], seen=new Set();
+  tokens.forEach(t=>{
+    if(!conf.validate(t)){ invalid.push(t); return; }
+    if(existingSet.has(t)){ dupExisting.push(t); return; }
+    if(seen.has(t)) return;
+    seen.add(t); valid.push(t);
+  });
+  if(valid.length > 50){
+    if(resultEl) resultEl.innerHTML = `<span style="color:#ff9f43">⚠️ ${valid.length} numéros valides mais le maximum est 50 par import. Seuls les 50 premiers seront importés.</span>`;
+    valid.length = 50;
+  }
+  if(!valid.length){
+    if(resultEl) resultEl.innerHTML = `<span style="color:var(--red)">Aucun numéro valide à ajouter.</span>`;
+    return;
+  }
+  // Ajuster la quantité totale = existants + nouveaux importés
+  const newTotal = existingSerials.length + valid.length;
+  const qtyInput = document.getElementById('adjQty');
+  if(qtyInput) qtyInput.value = newTotal;
+  updateAdjImeiFields(existingSerials, category);
+  valid.forEach((v,i)=>{ const inp=document.getElementById('adjImei_'+i); if(inp) inp.value=v; });
+  if(resultEl){
+    let msg = `<span style="color:#2ec97b">✅ ${valid.length} ${conf.shortLabel} importé(s) — quantité ajustée à ${newTotal}.</span>`;
+    if(invalid.length) msg += `<br><span style="color:#ff9f43">⚠️ ${invalid.length} invalide(s) ignoré(s).</span>`;
+    if(dupExisting.length) msg += `<br><span style="color:#ff9f43">⚠️ ${dupExisting.length} déjà enregistré(s) ignoré(s).</span>`;
+    resultEl.innerHTML = msg;
+  }
 }
 
 async function applyStockAdjust(itemId){
